@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "powerpoint": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory", 
+        "./backend/mcp/powerpoint_mcp",
+        "python",
+        "mcp_server.py"
+      ],
+      "env": {
+        "MISTRAL_API_KEY": "${MISTRAL_API_KEY}"
+      },
+      "description": "PowerPoint generation server using Mistral AI"
+    }
+  }
+}
