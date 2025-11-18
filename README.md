@@ -117,6 +117,20 @@ npm run dev
 # 5. Ouvrir http://localhost:8060
 ```
 
+### Lancement simplifié avec `start.sh`
+
+Pour démarrer plus rapidement, vous pouvez utiliser le script de démarrage à la racine :
+
+```bash
+./start.sh
+```
+
+Ce script :
+- libère les ports nécessaires,
+- vérifie votre version de Node.js,
+- exécute automatiquement `npm install` dans `frontend`,
+- lance le backend (via `uv run python run.py`) et le frontend (`npm run dev`).
+
 ## Documentation
 
 ### Pour commencer
