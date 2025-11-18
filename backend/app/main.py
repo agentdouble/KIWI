@@ -89,6 +89,9 @@ app.mount("/ws", socket_app)
 logger.info("Socket.IO mounted successfully on /ws")
 @app.on_event("startup")
 async def startup_event():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
     await ensure_document_processing_schema()
 
     # Initialiser le service de cache Redis
