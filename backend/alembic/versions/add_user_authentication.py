@@ -17,9 +17,8 @@ depends_on = None
 
 
 def upgrade():
-    # Create application users table
-    op.create_table(
-        'app_users',
+    # Create users table
+    op.create_table('users',
         sa.Column('id', postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column('email', sa.String(length=255), nullable=False),
         sa.Column('password_hash', sa.String(length=255), nullable=False),
@@ -27,13 +26,13 @@ def upgrade():
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=True),
         sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
         sa.PrimaryKeyConstraint('id'),
-        sa.UniqueConstraint('email'),
+        sa.UniqueConstraint('email')
     )
-    op.create_index(op.f('ix_app_users_email'), 'app_users', ['email'], unique=True)
+    op.create_index(op.f('ix_users_email'), 'users', ['email'], unique=True)
     
     # Add user_id to agents table
     op.add_column('agents', sa.Column('user_id', postgresql.UUID(as_uuid=True), nullable=True))
-    op.create_foreign_key('fk_agents_user_id', 'agents', 'app_users', ['user_id'], ['id'])
+    op.create_foreign_key('fk_agents_user_id', 'agents', 'users', ['user_id'], ['id'])
     
     # Rename created_by to user_id if it exists
     try:
@@ -43,17 +42,17 @@ def upgrade():
     
     # Add user_id to chats table
     op.add_column('chats', sa.Column('user_id', postgresql.UUID(as_uuid=True), nullable=True))
-    op.create_foreign_key('fk_chats_user_id', 'chats', 'app_users', ['user_id'], ['id'], ondelete='CASCADE')
+    op.create_foreign_key('fk_chats_user_id', 'chats', 'users', ['user_id'], ['id'], ondelete='CASCADE')
 
 
 def downgrade():
     # Drop foreign keys and columns
     op.drop_constraint('fk_chats_user_id', 'chats', type_='foreignkey')
     op.drop_column('chats', 'user_id')
-
+    
     op.drop_constraint('fk_agents_user_id', 'agents', type_='foreignkey')
     op.drop_column('agents', 'user_id')
-
-    # Drop application users table
-    op.drop_index(op.f('ix_app_users_email'), table_name='app_users')
-    op.drop_table('app_users')
+    
+    # Drop users table
+    op.drop_index(op.f('ix_users_email'), table_name='users')
+    op.drop_table('users')

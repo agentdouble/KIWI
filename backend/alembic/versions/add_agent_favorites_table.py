@@ -28,7 +28,7 @@ def upgrade() -> None:
         sa.Column('user_id', postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column('agent_id', postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-        sa.ForeignKeyConstraint(['user_id'], ['app_users.id'], ondelete='CASCADE'),
+        sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
         sa.ForeignKeyConstraint(['agent_id'], ['agents.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id'),
         sa.UniqueConstraint('user_id', 'agent_id', name='uq_agent_favorites_user_agent'),

@@ -17,9 +17,9 @@ class Agent(Base):
     is_default = Column(Boolean, default=False)
     is_public = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
-
+    
     # Relation avec l'utilisateur créateur (obligatoire)
-    user_id = Column(UUID(as_uuid=True), ForeignKey('app_users.id'), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
     
     # Configuration LLM
     model = Column(String(100), default="mistral-small-latest")
@@ -70,7 +70,7 @@ class AgentFavorite(Base):
     __tablename__ = "agent_favorites"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey('app_users.id', ondelete='CASCADE'), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     agent_id = Column(UUID(as_uuid=True), ForeignKey('agents.id', ondelete='CASCADE'), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
