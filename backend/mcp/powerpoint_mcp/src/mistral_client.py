@@ -1,31 +1,33 @@
-"""Mistral API client wrapper with error handling and retry logic."""
+"""LLM API client wrapper (OpenAI-compatible) with error handling and retry logic."""
 
 import json
 import re
 import time
 import unicodedata
 from typing import Optional, Dict, Any, List
-from mistralai import Mistral
+
+import httpx
 from loguru import logger
 from config import config
 
 
 class MistralClient:
-    """Wrapper for Mistral API with enhanced error handling."""
+    """Wrapper for an OpenAI-compatible LLM API with enhanced error handling."""
     
     def __init__(self, api_key: Optional[str] = None):
-        """Initialize Mistral client."""
+        """Initialize LLM API client."""
         self.api_key = api_key or config.mistral.api_key
         if not self.api_key:
-            raise ValueError("Mistral API key not provided. Set MISTRAL_API_KEY environment variable.")
+            raise ValueError("LLM API key not provided. Set API_KEY environment variable.")
         
-        self.client = Mistral(api_key=self.api_key)
-        self.model = config.mistral.model
+        self.api_url = config.mistral.api_url
+        self.model = config.mistral.api_model
         self.temperature = config.mistral.temperature
         self.max_tokens = config.mistral.max_tokens
         self.top_p = config.mistral.top_p
+        self.timeout = config.mistral.timeout
         
-        logger.info(f"Initialized Mistral client with model: {self.model}")
+        logger.info(f"Initialized LLM API client with model: {self.model}")
     
     def generate_json(
         self,
@@ -36,7 +38,7 @@ class MistralClient:
         max_tokens: Optional[int] = None
     ) -> Dict[str, Any]:
         """
-        Generate JSON response from Mistral.
+        Generate JSON response from the LLM API.
         
         Args:
             prompt: User prompt
@@ -81,22 +83,39 @@ class MistralClient:
         for attempt in range(config.mistral.retry_attempts):
             try:
                 logger.debug(f"Attempt {attempt + 1}/{config.mistral.retry_attempts}")
-                
-                response = self.client.chat.complete(
-                    model=self.model,
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    top_p=self.top_p,
-                    response_format={"type": "json_object"}  # Force JSON response
-                )
-                
-                if response.choices and response.choices[0].message:
-                    content = response.choices[0].message.content
-                    logger.debug(f"Generated response length: {len(content)} chars")
-                    return content
-                else:
-                    raise ValueError("Empty response from Mistral API")
+                headers = {
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                }
+
+                payload: Dict[str, Any] = {
+                    "model": self.model,
+                    "messages": messages,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                    "top_p": self.top_p,
+                    # Mistral-specific but ignored by other providers that don't support it
+                    "response_format": {"type": "json_object"},
+                }
+
+                with httpx.Client(timeout=self.timeout) as client:
+                    response = client.post(self.api_url, json=payload, headers=headers)
+
+                if response.status_code != 200:
+                    raise ValueError(
+                        f"LLM API request failed with status {response.status_code}: {response.text}"
+                    )
+
+                data = response.json()
+                choices = data.get("choices") or []
+                if choices:
+                    message = choices[0].get("message") or {}
+                    content = message.get("content") or ""
+                    if content:
+                        logger.debug(f"Generated response length: {len(content)} chars")
+                        return content
+
+                raise ValueError("Empty response from LLM API")
                     
             except Exception as e:
                 logger.warning(f"Attempt {attempt + 1} failed: {str(e)}")
@@ -166,7 +185,7 @@ class MistralClient:
                             pass
             
             logger.error(f"Could not parse JSON from response: {response[:500]}...")
-            raise ValueError("Failed to parse JSON from Mistral response")
+            raise ValueError("Failed to parse JSON from LLM response")
     
     def _clean_json_content(self, data):
         """Recursively clean strings in parsed JSON data."""
@@ -219,14 +238,31 @@ class MistralClient:
         return cleaned
     
     def test_connection(self) -> bool:
-        """Test connection to Mistral API."""
+        """Test connection to the LLM API."""
         try:
-            response = self.client.chat.complete(
-                model=self.model,
-                messages=[{"role": "user", "content": "Say 'OK' if you can hear me"}],
-                max_tokens=10
-            )
-            return bool(response.choices)
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            }
+            payload = {
+                "model": self.model,
+                "messages": [
+                    {"role": "user", "content": "Say 'OK' if you can hear me"}
+                ],
+                "max_tokens": 10,
+                "temperature": 0.0,
+            }
+            with httpx.Client(timeout=self.timeout) as client:
+                response = client.post(self.api_url, json=payload, headers=headers)
+            if response.status_code != 200:
+                logger.error(
+                    f"Connection test failed with status {response.status_code}: {response.text}"
+                )
+                return False
+
+            data = response.json()
+            choices = data.get("choices") or []
+            return bool(choices)
         except Exception as e:
             logger.error(f"Connection test failed: {e}")
             return False

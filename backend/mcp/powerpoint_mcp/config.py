@@ -11,9 +11,10 @@ load_dotenv()
 
 
 class MistralConfig(BaseModel):
-    """Mistral API configuration."""
-    api_key: str = Field(default_factory=lambda: os.getenv("MISTRAL_API_KEY", ""))
-    model: str = Field(default="mistral-small-latest")
+    """LLM API configuration for the PowerPoint MCP (OpenAI-compatible)."""
+    api_key: str = Field(default_factory=lambda: os.getenv("API_KEY", ""))
+    api_url: str = Field(default_factory=lambda: os.getenv("API_URL", "https://api.mistral.ai/v1/chat/completions"))
+    api_model: str = Field(default_factory=lambda: os.getenv("API_MODEL", "mistral-small-latest"))
     temperature: float = Field(default=0.3, ge=0.0, le=1.0)
     max_tokens: int = Field(default=128000, ge=1)
     top_p: float = Field(default=0.95, ge=0.0, le=1.0)
@@ -59,7 +60,7 @@ class AppConfig(BaseModel):
     debug: bool = Field(default_factory=lambda: os.getenv("DEBUG", "false").lower() == "true")
     
     def validate_api_key(self) -> bool:
-        """Check if Mistral API key is configured."""
+        """Check if LLM API key is configured."""
         return bool(self.mistral.api_key)
     
     @classmethod
@@ -67,8 +68,9 @@ class AppConfig(BaseModel):
         """Create config from environment variables."""
         return cls(
             mistral=MistralConfig(
-                api_key=os.getenv("MISTRAL_API_KEY", ""),
-                model=os.getenv("MISTRAL_MODEL", "mistral-small-latest"),
+                api_key=os.getenv("API_KEY", ""),
+                api_url=os.getenv("API_URL", "https://api.mistral.ai/v1/chat/completions"),
+                api_model=os.getenv("API_MODEL", "mistral-small-latest"),
                 temperature=float(os.getenv("MISTRAL_TEMPERATURE", "0.3")),
                 max_tokens=int(os.getenv("MISTRAL_MAX_TOKENS", "128000")),
                 mode=os.getenv("MISTRAL_MODE", "api"),

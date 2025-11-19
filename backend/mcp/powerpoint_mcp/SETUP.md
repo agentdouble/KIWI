@@ -1,8 +1,8 @@
-# Configuration de la clé API Mistral
+# Configuration de l'API LLM (OpenAI-compatible)
 
 ## Étapes pour obtenir et configurer votre clé API :
 
-### 1. Obtenir une clé API Mistral
+### 1. Obtenir une clé API (exemple : Mistral)
 
 1. Allez sur [console.mistral.ai](https://console.mistral.ai/)
 2. Créez un compte ou connectez-vous
@@ -11,7 +11,7 @@
 
 ### 2. Configurer la clé dans le projet
 
-Modifiez le fichier `.env` et remplacez `your_mistral_api_key_here` par votre vraie clé :
+Modifiez le fichier `.env` et remplacez `your_api_key_here` par votre vraie clé :
 
 ```bash
 # Option 1 : Éditer manuellement le fichier .env
@@ -20,11 +20,11 @@ nano .env
 vim .env
 
 # Option 2 : Remplacer directement (remplacez sk-xxxxx par votre clé)
-sed -i '' 's/your_mistral_api_key_here/sk-votre-vraie-cle-ici/' .env
+sed -i '' 's/your_api_key_here/sk-votre-vraie-cle-ici/' .env
 
 # Option 3 : Écraser la ligne (remplacez sk-xxxxx par votre clé)
-echo "MISTRAL_API_KEY=sk-votre-vraie-cle-ici" > temp.env
-grep -v MISTRAL_API_KEY .env >> temp.env
+echo "API_KEY=sk-votre-vraie-cle-ici" > temp.env
+grep -v API_KEY .env >> temp.env
 mv temp.env .env
 ```
 
@@ -39,7 +39,7 @@ Si le test réussit, vous verrez :
 ```
 ✓ API key found
 ✓ Using model: mistral-small-latest
-✓ Successfully connected to Mistral API
+✓ Successfully connected to LLM API
 
 Ready to generate presentations!
 ```
@@ -74,5 +74,5 @@ uv run python main.py convert -t "Créez une présentation sur l'intelligence ar
 ### Pour voir la clé configurée (masquée)
 ```bash
 # Affiche les premiers caractères seulement
-grep MISTRAL_API_KEY .env | sed 's/=.*$/=sk-****.../'
+grep API_KEY .env | sed 's/=.*$/=sk-****.../'
 ```

@@ -18,7 +18,7 @@ from config import config
 # Initialize Typer app and Rich console
 app = typer.Typer(
     name="powerpoint-generator",
-    help="Convert text to PowerPoint JSON using Mistral AI",
+    help="Convert text to PowerPoint JSON using an OpenAI-compatible LLM API",
     add_completion=False
 )
 console = Console()
@@ -94,9 +94,9 @@ def convert(
     # Check API key
     if not config.validate_api_key():
         console.print(Panel(
-            "[red]Mistral API key not found![/red]\n\n"
+            "[red]LLM API key not found![/red]\n\n"
             "Please set your API key in the .env file:\n"
-            "MISTRAL_API_KEY=your_key_here",
+            "API_KEY=your_key_here",
             title="Configuration Error",
             border_style="red"
         ))
@@ -155,8 +155,8 @@ def convert(
 
 @app.command()
 def test():
-    """Test connection to Mistral API."""
-    console.print("[bold]Testing Mistral API connection...[/bold]\n")
+    """Test connection to the LLM API."""
+    console.print("[bold]Testing LLM API connection...[/bold]\n")
     
     # Check API key
     if not config.validate_api_key():
@@ -164,16 +164,16 @@ def test():
         raise typer.Exit(1)
     
     console.print("[green]✓[/green] API key found")
-    console.print(f"[green]✓[/green] Using model: {config.mistral.model}")
+    console.print(f"[green]✓[/green] Using model: {config.mistral.api_model}")
     
     try:
         # Test connection
-        with console.status("[bold green]Connecting to Mistral API..."):
+        with console.status("[bold green]Connecting to LLM API..."):
             converter = PowerPointConverter()
             success = converter.test_connection()
         
         if success:
-            console.print("[green]✓[/green] Successfully connected to Mistral API")
+            console.print("[green]✓[/green] Successfully connected to LLM API")
             console.print("\n[bold green]Ready to generate presentations![/bold]")
         else:
             console.print("[red]✗[/red] Connection test failed")
@@ -439,9 +439,9 @@ def full_pipeline(
     # Check API key
     if not config.validate_api_key():
         console.print(Panel(
-            "[red]Mistral API key not found![/red]\n\n"
+            "[red]LLM API key not found![/red]\n\n"
             "Please set your API key in the .env file:\n"
-            "MISTRAL_API_KEY=your_key_here",
+            "API_KEY=your_key_here",
             title="Configuration Error",
             border_style="red"
         ))
