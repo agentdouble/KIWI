@@ -167,7 +167,7 @@ LLM_MODE=api
 # Endpoint de chat compatible OpenAI (ex: Mistral Cloud, OpenAI, serveur vLLM distant, ...)
 API_URL=https://api.mistral.ai/v1/chat/completions
 API_KEY=your-api-key
-MISTRAL_MODEL=mistral-small-latest   # identifiant de modèle utilisé sur l'API
+API_MODEL=mistral-small-latest       # identifiant de modèle utilisé sur l'API
 PIXTRAL_MODEL=pixtral-large-latest
 
 # Clé Mistral dédiée (embeddings, Pixtral, MCP, ...)

@@ -20,7 +20,6 @@ class Settings(BaseSettings):
     
     # Mistral API (pour fonctionnalités spécifiques: embeddings, Pixtral, MCP)
     mistral_api_key: str = Field(default=None)
-    mistral_model: str = "mistral-small-latest"
     pixtral_model: str = "pixtral-large-latest"
 
     # API LLM (format OpenAI-compatible) pour le mode API
@@ -31,6 +30,10 @@ class Settings(BaseSettings):
     api_key: Optional[str] = Field(
         default=None,
         description="Clé API pour le fournisseur LLM principal (utilisée avec api_url)",
+    )
+    api_model: str = Field(
+        default="mistral-small-latest",
+        description="Identifiant du modèle utilisé sur l'API LLM principale (format OpenAI-compatible)",
     )
     
     # vLLM Configuration (pour mode local)
@@ -236,4 +239,4 @@ if settings.is_local_mode:
     print(f"   Model: {settings.vllm_model_name}")
 else:
     print(f"   API URL: {settings.api_url}")
-    print(f"   API Model: {settings.mistral_model}")
+    print(f"   API Model: {settings.api_model}")

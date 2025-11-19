@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 class MistralService:
     def __init__(self):
         # Service générique pour une API de chat OpenAI-compatible
-        self.model = settings.mistral_model
+        self.model = settings.api_model
         self._api_url = settings.api_url
         self._api_key = settings.api_key
         self._timeout = 60.0

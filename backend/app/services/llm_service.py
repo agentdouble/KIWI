@@ -92,7 +92,7 @@ class LLMService:
     def model_name(self) -> str:
         """Retourne le nom du modèle utilisé"""
         if self.mode == "api":
-            return settings.mistral_model
+            return settings.api_model
         else:
             return settings.vllm_model_name
     

@@ -102,7 +102,7 @@ if __name__ == "__main__":
     if settings.is_api_mode:
         print(f"   Mode: API (OpenAI-compatible HTTP API)")
         print(f"   API URL: {settings.api_url}")
-        print(f"   Modèle: {settings.mistral_model}")
+        print(f"   Modèle: {settings.api_model}")
         print(f"   API Key: {'✅ Configurée' if settings.api_key else '❌ Manquante'}")
     else:
         print(f"   Mode: LOCAL (vLLM)")
