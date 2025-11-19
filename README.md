@@ -98,6 +98,7 @@ Pour une installation détaillée, consultez le [Guide d'Installation](./docs/IN
 git clone <repository-url>
 cd foyergpt
 cd backend && cp .env.example .env
+cd ../frontend && cp .env.example .env
 
 # 2. Base de données
 createdb oskour
@@ -107,14 +108,14 @@ cd backend
 pip install uv
 uv sync
 uv run alembic upgrade head
-uv run uvicorn app.main:app --reload --port 8061
+uv run python run.py
 
 # 4. Frontend (Terminal 2)
 cd frontend
 npm install
 npm run dev
 
-# 5. Ouvrir http://localhost:8060
+# 5. Ouvrir http://localhost:8091
 ```
 
 ### Lancement simplifié avec `start.sh`
@@ -183,7 +184,7 @@ EMBEDDING_MODEL=mistral-embed
 
 ### Configuration Frontend
 
-Le frontend se connecte automatiquement au backend sur `http://localhost:8061`.
+Le frontend se connecte automatiquement au backend via la variable d'environnement `VITE_BACKEND_URL` (par défaut `http://localhost:8077` dans `frontend/.env.example`), et est servi sur `VITE_FRONTEND_URL` (par défaut `http://localhost:8091`).
 
 ## Tests
 
