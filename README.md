@@ -205,6 +205,7 @@ npm test
 - `app.services.llm_service.LLMService` centralise la délégation vers les modes API (`MistralService`) et local (`VLLMService`) tout en préservant le comportement existant.
 - `app.api.router.api_router` enregistre explicitement toutes les routes (y compris `auth`) au démarrage, ce qui évite de masquer d'éventuelles erreurs d'import.
 - `app.main` utilise un logger de module unique pour la journalisation HTTP, les exceptions et Socket.IO.
+- Les derniers appels `print` de débogage backend ont été remplacés par une journalisation structurée (`logging`) dans `app.config`, `app.api.documents` et `app.utils.dependencies`, afin d'être prêts pour la production et d'unifier les logs.
 
 ## Contribution
 
