@@ -231,7 +231,13 @@ sleep 3
 
 # Lancer le frontend
 echo "🎨 Démarrage du frontend..."
-cd "$SCRIPT_DIR/frontend" && npm run dev &
+cd "$SCRIPT_DIR/frontend" || { echo "❌ Impossible d'accéder au dossier frontend."; exit 1; }
+echo "📦 Installation des dépendances frontend (npm install)..."
+if ! npm install; then
+    echo "❌ Échec de 'npm install' dans le frontend."
+    exit 1
+fi
+npm run dev &
 FRONTEND_PID=$!
 echo "   Frontend PID: $FRONTEND_PID"
 
