@@ -7,13 +7,17 @@ from app.database import get_db
 from app.models import Session
 from app.models.user import User
 from app.utils.auth import verify_token
+import logging
 import uuid
+
+
+logger = logging.getLogger(__name__)
 
 async def get_session_id(x_session_id: Optional[str] = Header(None)) -> str:
     """Récupérer le session ID depuis le header"""
     if not x_session_id:
         # Log pour déboguer
-        print(f"ERROR: X-Session-ID header missing. Received headers: {x_session_id}")
+        logger.error("X-Session-ID header missing. Received headers: %s", x_session_id)
         raise HTTPException(
             status_code=400, 
             detail="X-Session-ID header required. Please ensure the header is sent with your request."
