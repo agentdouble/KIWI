@@ -43,6 +43,7 @@ FoyerGPT est une plateforme moderne de chat IA qui permet aux utilisateurs de cr
 - **Cache** : Redis pour les performances
 - **Temps réel** : Socket.IO pour les WebSockets
 - **Sécurité** : JWT, bcrypt, rate limiting
+- **Observabilité** : logs HTTP concis (méthode, chemin, statut, temps de traitement)
 
 ### Frontend (React/TypeScript)
 - **Framework** : React 19 avec TypeScript
