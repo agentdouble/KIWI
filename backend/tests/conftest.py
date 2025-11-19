@@ -1,11 +1,19 @@
+import os
 import pytest
 import asyncio
 from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from app.models.base import Base
-from app.config import settings
 import uuid
+
+# Configuration minimale de l'environnement pour les tests
+os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key")
+os.environ.setdefault("LLM_MODE", os.environ.get("LLM_MODE", "local"))
+os.environ.setdefault("API_URL", os.environ.get("API_URL", "https://api.mistral.ai/v1/chat/completions"))
+os.environ.setdefault("API_KEY", os.environ.get("API_KEY", "test-api-key"))
+
+from app.config import settings
 
 # Configuration pour les tests
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"

@@ -31,7 +31,7 @@ FoyerGPT est une plateforme moderne de chat IA qui permet aux utilisateurs de cr
 - Support pour PDF, DOCX, TXT, MD, et images
 
 ### Modes LLM flexibles
-- **Mode API** : Intégration avec l'API Mistral
+- **Mode API** : Intégration avec une API LLM externe au format **OpenAI-compatible** (Mistral, OpenAI, vLLM distant, etc.)
 - **Mode Local** : Support vLLM pour l'inférence locale
 - Configuration dynamique selon les besoins
 
@@ -163,10 +163,15 @@ JWT_SECRET_KEY=your-jwt-secret
 # Mode LLM (api ou local)
 LLM_MODE=api
 
-# Mode API (Mistral Cloud)
-MISTRAL_API_KEY=your-mistral-key
-MISTRAL_MODEL=mistral-small-latest
+# Mode API (OpenAI-compatible)
+# Endpoint de chat compatible OpenAI (ex: Mistral Cloud, OpenAI, serveur vLLM distant, ...)
+API_URL=https://api.mistral.ai/v1/chat/completions
+API_KEY=your-api-key
+MISTRAL_MODEL=mistral-small-latest   # identifiant de modèle utilisé sur l'API
 PIXTRAL_MODEL=pixtral-large-latest
+
+# Clé Mistral dédiée (embeddings, Pixtral, MCP, ...)
+MISTRAL_API_KEY=your-mistral-key
 
 # Mode local (vLLM + Pixtral)
 # Utilisez une URL joignable depuis le backend (localhost, IP privée, ...)

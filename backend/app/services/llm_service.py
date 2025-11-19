@@ -11,7 +11,7 @@ class LLMService:
     
     def __init__(self):
         if settings.is_api_mode:
-            logger.info("🌐 Initializing LLM Service in API mode (Mistral)")
+            logger.info("🌐 Initializing LLM Service in API mode (OpenAI-compatible HTTP API)")
             self._service = MistralService()
             self.mode = "api"
         else:

@@ -5,7 +5,7 @@ import os
 
 class Settings(BaseSettings):
     # Mode de fonctionnement
-    llm_mode: Literal["api", "local"] = Field(default="api", description="Mode API (Mistral) ou Local (vLLM)")
+    llm_mode: Literal["api", "local"] = Field(default="api", description="Mode API (provider externe OpenAI-compatible) ou Local (vLLM)")
     
     # Database
     db_name: str = "oskour"
@@ -18,10 +18,20 @@ class Settings(BaseSettings):
     # Security
     jwt_secret_key: str = Field(default=None)
     
-    # Mistral API (pour mode API)
+    # Mistral API (pour fonctionnalités spécifiques: embeddings, Pixtral, MCP)
     mistral_api_key: str = Field(default=None)
     mistral_model: str = "mistral-small-latest"
     pixtral_model: str = "pixtral-large-latest"
+
+    # API LLM (format OpenAI-compatible) pour le mode API
+    api_url: str = Field(
+        default="https://api.mistral.ai/v1/chat/completions",
+        description="Endpoint /v1/chat/completions compatible OpenAI pour le LLM principal en mode API",
+    )
+    api_key: Optional[str] = Field(
+        default=None,
+        description="Clé API pour le fournisseur LLM principal (utilisée avec api_url)",
+    )
     
     # vLLM Configuration (pour mode local)
     vllm_api_url: str = "http://0.0.0.0:5263/v1/chat/completions"
@@ -120,10 +130,17 @@ class Settings(BaseSettings):
 
         # Validation selon le mode
         if self.llm_mode == "api":
-            if not self.mistral_api_key:
-                self.mistral_api_key = os.getenv("MISTRAL_API_KEY")
-                if not self.mistral_api_key:
-                    raise ValueError("MISTRAL_API_KEY environment variable is required in API mode")
+            # En mode API, le LLM principal utilise une API OpenAI-compatible
+            if not self.api_url:
+                raise ValueError("API_URL environment variable is required in API mode")
+
+            if not self.api_key:
+                # Permettre la configuration via variable d'environnement API_KEY
+                self.api_key = os.getenv("API_KEY")
+
+            if not self.api_key:
+                raise ValueError("API_KEY environment variable is required in API mode")
+
         elif self.llm_mode == "local":
             # En mode local, vérifier que l'URL vLLM est configurée
             if not self.vllm_api_url:
@@ -218,4 +235,5 @@ if settings.is_local_mode:
     print(f"   vLLM URL: {settings.vllm_api_url}")
     print(f"   Model: {settings.vllm_model_name}")
 else:
-    print(f"   Mistral Model: {settings.mistral_model}")
+    print(f"   API URL: {settings.api_url}")
+    print(f"   API Model: {settings.mistral_model}")
