@@ -17,48 +17,80 @@ export const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  withCredentials: true, // Pour les cookies de session
+  withCredentials: true,
 })
+
+const AUTH_STORAGE_KEY = 'auth-storage'
+const SESSION_STORAGE_KEY = 'session-storage'
+
+const buildAuthorizationHeader = (): string | undefined => {
+  const authStorageData = localStorage.getItem(AUTH_STORAGE_KEY)
+
+  if (!authStorageData) {
+    return undefined
+  }
+
+  try {
+    const parsed = JSON.parse(authStorageData)
+    const token = parsed?.state?.token as string | undefined
+
+    if (!token || token.includes('RS256')) {
+      return undefined
+    }
+
+    return `Bearer ${token}`
+  } catch (e) {
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Error parsing auth storage:', e)
+    }
+    return undefined
+  }
+}
+
+const buildSessionHeader = (): string | undefined => {
+  const sessionStorageData = localStorage.getItem(SESSION_STORAGE_KEY)
+
+  if (!sessionStorageData) {
+    return undefined
+  }
+
+  try {
+    const parsed = JSON.parse(sessionStorageData)
+    const sessionId = parsed?.state?.sessionId as string | undefined
+    return sessionId || undefined
+  } catch (e) {
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Error parsing session storage:', e)
+    }
+    return undefined
+  }
+}
+
+export const authHeaderBuilder = {
+  buildAuthorizationHeader,
+  buildSessionHeader,
+}
 
 // Intercepteur pour ajouter le JWT token et sessionId à chaque requête
 api.interceptors.request.use((config) => {
+  const headers = (config.headers ?? {}) as Record<string, string>
+
   // Ne PAS ajouter de token pour les routes de login/register
   const isAuthRoute = config.url?.includes('/auth/login') || config.url?.includes('/auth/register')
-  
+
   if (!isAuthRoute) {
-    // Récupérer le token JWT depuis le store d'authentification
-    const authStorageData = localStorage.getItem('auth-storage')
-    
-    if (authStorageData) {
-      try {
-        const parsed = JSON.parse(authStorageData)
-        const token = parsed?.state?.token
-        if (token && !token.includes('RS256')) { // Ignorer les tokens RS256 (Foyer)
-          config.headers['Authorization'] = `Bearer ${token}`
-        }
-      } catch (e) {
-        // Ne pas logger les erreurs sensibles en production
-        if (process.env.NODE_ENV === 'development') {
-          console.error('Error parsing auth storage:', e)
-        }
-      }
+    const authorization = buildAuthorizationHeader()
+    if (authorization) {
+      headers['Authorization'] = authorization
     }
   }
-  
-  // Récupérer le sessionId depuis le store Zustand (pour compatibilité)
-  const sessionStorageData = localStorage.getItem('session-storage')
-  if (sessionStorageData) {
-    try {
-      const parsed = JSON.parse(sessionStorageData)
-      const sessionId = parsed?.state?.sessionId
-      if (sessionId) {
-        config.headers['X-Session-ID'] = sessionId
-      }
-    } catch (e) {
-      console.error('Error parsing session storage:', e)
-    }
+
+  const sessionId = buildSessionHeader()
+  if (sessionId) {
+    headers['X-Session-ID'] = sessionId
   }
-  
+
+  config.headers = headers
   return config
 })
 

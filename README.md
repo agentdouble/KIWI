@@ -50,6 +50,7 @@ FoyerGPT est une plateforme moderne de chat IA qui permet aux utilisateurs de cr
 - **État** : Zustand + React Query
 - **UI** : Tailwind CSS + Radix UI
 - **Routing** : React Router v7
+- **Client API** : gestion centralisée des en-têtes d’authentification et de session (axios + streaming) dans `frontend/src/lib/api/config.ts`
 
 ## Structure du projet
 

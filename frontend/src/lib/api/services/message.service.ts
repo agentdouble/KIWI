@@ -1,4 +1,4 @@
-import { api } from '../config'
+import { api, authHeaderBuilder } from '../config'
 import type {
   ApiResponse,
   MessageResponse,
@@ -24,15 +24,6 @@ export interface StreamController {
 export const messageService = {
   // Envoyer un message à l'IA
   async sendMessage(data: SendMessageRequest): Promise<MessageResponse> {
-    console.log('Sending message with data:', data)
-    try {
-      const ss = localStorage.getItem('session-storage')
-      const parsed = ss ? JSON.parse(ss) : null
-      console.log('SessionId (session-storage):', parsed?.state?.sessionId || null)
-    } catch {
-      // ignore
-    }
-    
     try {
       const response = await api.post<MessageResponse>(
         `/api/messages/`,
@@ -40,8 +31,10 @@ export const messageService = {
       )
       // Le backend retourne directement les données
       return response.data
-    } catch (error: any) {
-      console.error('Message API error:', error.response?.data)
+    } catch (error: unknown) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[messageService] sendMessage failed', error)
+      }
       throw error
     }
   },
@@ -62,34 +55,14 @@ export const messageService = {
       'Content-Type': 'application/json',
     }
 
-    const authStorage = localStorage.getItem('auth-storage')
-    if (authStorage) {
-      try {
-        const parsed = JSON.parse(authStorage)
-        const token: string | undefined = parsed?.state?.token
-        if (token && !token.includes('RS256')) {
-          headers['Authorization'] = `Bearer ${token}`
-        }
-      } catch (error) {
-        if (process.env.NODE_ENV === 'development') {
-          console.error('Impossible de parser auth-storage pour le streaming:', error)
-        }
-      }
+    const authorization = authHeaderBuilder.buildAuthorizationHeader()
+    if (authorization) {
+      headers['Authorization'] = authorization
     }
 
-    const sessionStorageData = localStorage.getItem('session-storage')
-    if (sessionStorageData) {
-      try {
-        const parsed = JSON.parse(sessionStorageData)
-        const sessionId: string | undefined = parsed?.state?.sessionId
-        if (sessionId) {
-          headers['X-Session-ID'] = sessionId
-        }
-      } catch (error) {
-        if (process.env.NODE_ENV === 'development') {
-          console.error('Impossible de parser session-storage pour le streaming:', error)
-        }
-      }
+    const sessionId = authHeaderBuilder.buildSessionHeader()
+    if (sessionId) {
+      headers['X-Session-ID'] = sessionId
     }
 
     const url = `${api.defaults.baseURL}/api/messages/stream`
