@@ -9,6 +9,7 @@ from app.utils.schema import ensure_document_processing_schema
 from slowapi.errors import RateLimitExceeded
 import socketio
 import logging
+import time
 
 logging.basicConfig(
     level=logging.INFO,
@@ -63,11 +64,17 @@ app.add_middleware(
 )
 
 @app.middleware("http")
-async def log_requests(request, call_next):
-    logger.info(f"{request.method} {request.url.path}")
-    logger.info(f"Headers: {dict(request.headers)}")
+async def log_requests(request: Request, call_next):
+    start_time = time.perf_counter()
     response = await call_next(request)
-    logger.info(f"Response status: {response.status_code}")
+    process_time_ms = (time.perf_counter() - start_time) * 1000
+    logger.info(
+        "HTTP %s %s - %s (%.2f ms)",
+        request.method,
+        request.url.path,
+        response.status_code,
+        process_time_ms,
+    )
     return response
 
 sio = socketio.AsyncServer(
