@@ -185,37 +185,12 @@ class MCPService:
 
                 use_local = settings.is_local_mode
 
-                if use_local:
-                    try:
-                        parsed = urlparse(settings.vllm_api_url)
-                        base_path = parsed.path
-                        if base_path.endswith("/chat/completions"):
-                            base_path = base_path[: -len("/chat/completions")]
-                        if not base_path:
-                            base_path = "/"
-                        base_url = urlunparse(parsed._replace(path=base_path))
-                    except Exception:
-                        base_url = "http://localhost:5263/v1"
-
-                    os.environ.setdefault("MISTRAL_MODE", "local")
-                    os.environ.setdefault("LOCAL_BASE_URL", base_url)
-                    os.environ.setdefault("LOCAL_MODEL_PATH", settings.vllm_model_name)
-
-                    if mcp_config:
-                        mcp_config.mistral.mode = "local"
-                        mcp_config.mistral.local_base_url = base_url
-                        mcp_config.mistral.local_model_path = settings.vllm_model_name
-                else:
-                    # API mode requires a valid key
-                    if not mcp_config or not mcp_config.validate_api_key():
-                        if not settings.mistral_api_key:
-                            return {
-                                "success": False,
-                                "message": "Clé API Mistral non configurée"
-                            }
-                        os.environ.setdefault("MISTRAL_API_KEY", settings.mistral_api_key)
-                        if mcp_config:
-                            mcp_config.mistral.api_key = settings.mistral_api_key
+                # In API mode, ensure a valid Mistral key is configured on the backend
+                if not use_local and not settings.mistral_api_key:
+                    return {
+                        "success": False,
+                        "message": "Clé API Mistral non configurée"
+                    }
 
                 self.converter = PowerPointConverter(
                     api_key=settings.mistral_api_key if not use_local else None,
