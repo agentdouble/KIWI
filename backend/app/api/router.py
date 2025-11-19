@@ -1,19 +1,26 @@
 from fastapi import APIRouter
-from app.api import sessions, agents, chats, messages, documents, documents_processing, powerpoint, search, admin, alert, feature_updates
+from app.api import (
+    auth,
+    sessions,
+    agents,
+    chats,
+    messages,
+    documents,
+    documents_processing,
+    powerpoint,
+    search,
+    admin,
+    alert,
+    feature_updates,
+)
 import logging
 
 logger = logging.getLogger(__name__)
 
 api_router = APIRouter()
 
-try:
-    from app.api import auth
-    api_router.include_router(auth.router, prefix="/auth")
-    logger.info("Auth router loaded successfully")
-except Exception as e:
-    logger.error(f"Failed to load auth router: {e}")
-    import traceback
-    traceback.print_exc()
+api_router.include_router(auth.router, prefix="/auth")
+logger.info("Auth router loaded successfully")
 api_router.include_router(sessions.router, prefix="/sessions", tags=["sessions"])
 api_router.include_router(agents.router, prefix="/agents", tags=["agents"])
 api_router.include_router(chats.router, prefix="/chats", tags=["chats"])

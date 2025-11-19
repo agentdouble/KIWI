@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Backgro
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from uuid import UUID
+import logging
 
 from app.database import get_db, AsyncSessionLocal
 from app.utils.auth import get_current_active_user, get_optional_current_user, is_user_admin
@@ -18,6 +19,7 @@ from app.services.document_service import document_service
 from app.config import settings
 
 router = APIRouter(tags=["documents"])
+logger = logging.getLogger(__name__)
 
 
 async def _process_document_background(document_id: str):
@@ -56,7 +58,7 @@ async def upload_agent_document(
         raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres agents")
     elif not current_user:
         # Pour les tests sans auth - À SUPPRIMER EN PRODUCTION
-        print("⚠️  ATTENTION: Upload sans authentification - À supprimer en production")
+        logger.warning("Upload sans authentification - À supprimer en production")
     
     # Upload le document (sans traitement immédiat)
     document = await document_service.upload_document(
@@ -99,7 +101,7 @@ async def list_agent_documents(
             raise HTTPException(status_code=403, detail="Accès non autorisé")
         elif not current_user:
             # Pour les tests sans auth - À SUPPRIMER EN PRODUCTION
-            print("⚠️  ATTENTION: Listing sans authentification - À supprimer en production")
+            logger.warning("Listing sans authentification - À supprimer en production")
     
     # Récupérer les documents
     documents = await document_service.list_entity_documents(

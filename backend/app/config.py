@@ -1,7 +1,11 @@
 from pydantic_settings import BaseSettings
 from typing import List, Literal, Optional, Union
 from pydantic import Field
+import logging
 import os
+
+
+logger = logging.getLogger(__name__)
 
 class Settings(BaseSettings):
     # Mode de fonctionnement
@@ -151,7 +155,7 @@ class Settings(BaseSettings):
             if not self.pixtral_vllm_url:
                 raise ValueError("PIXTRAL_VLLM_URL is required in local mode")
             # Log le mode pour confirmation
-            print(f"🚀 Running in LOCAL mode with vLLM at {self.vllm_api_url}")
+            logger.info("Running in LOCAL mode with vLLM at %s", self.vllm_api_url)
 
         # Synchroniser provider d'embeddings avec le mode LLM si explicite
         env_provider = os.getenv("EMBEDDING_PROVIDER")
@@ -233,10 +237,10 @@ class Settings(BaseSettings):
 settings = Settings()
 
 # Log du mode au démarrage
-print(f"🔧 Configuration loaded: LLM Mode = {settings.llm_mode}")
+logger.info("Configuration loaded: LLM Mode = %s", settings.llm_mode)
 if settings.is_local_mode:
-    print(f"   vLLM URL: {settings.vllm_api_url}")
-    print(f"   Model: {settings.vllm_model_name}")
+    logger.info("vLLM URL: %s", settings.vllm_api_url)
+    logger.info("Model: %s", settings.vllm_model_name)
 else:
-    print(f"   API URL: {settings.api_url}")
-    print(f"   API Model: {settings.api_model}")
+    logger.info("API URL: %s", settings.api_url)
+    logger.info("API Model: %s", settings.api_model)

@@ -98,6 +98,7 @@ Pour une installation détaillée, consultez le [Guide d'Installation](./docs/IN
 git clone <repository-url>
 cd foyergpt
 cd backend && cp .env.example .env
+cd ../frontend && cp .env.example .env
 
 # 2. Base de données
 createdb oskour
@@ -107,14 +108,14 @@ cd backend
 pip install uv
 uv sync
 uv run alembic upgrade head
-uv run uvicorn app.main:app --reload --port 8061
+uv run python run.py
 
 # 4. Frontend (Terminal 2)
 cd frontend
 npm install
 npm run dev
 
-# 5. Ouvrir http://localhost:8060
+# 5. Ouvrir http://localhost:8091
 ```
 
 ### Lancement simplifié avec `start.sh`
@@ -188,7 +189,9 @@ EMBEDDING_MODEL=mistral-embed
 
 ### Configuration Frontend
 
-Le frontend se connecte automatiquement au backend sur `http://localhost:8061`.
+Le frontend se connecte automatiquement au backend via la variable d'environnement `VITE_BACKEND_URL` (par défaut `http://localhost:8077` dans `frontend/.env.example`), et est servi sur `VITE_FRONTEND_URL` (par défaut `http://localhost:8091`).
+
+Le module MCP PowerPoint (dossier `backend/mcp/powerpoint_mcp`) réutilise automatiquement cette configuration LLM du backend (`LLM_MODE`, `MISTRAL_API_KEY`, `VLLM_API_URL`, `VLLM_MODEL_NAME`) : vous n'avez donc à définir ces variables qu'une seule fois dans `backend/.env`.
 
 ## Tests
 
@@ -201,6 +204,13 @@ uv run pytest
 cd frontend
 npm test
 ```
+
+## Refactorisation backend
+
+- `app.services.llm_service.LLMService` centralise la délégation vers les modes API (`MistralService`) et local (`VLLMService`) tout en préservant le comportement existant.
+- `app.api.router.api_router` enregistre explicitement toutes les routes (y compris `auth`) au démarrage, ce qui évite de masquer d'éventuelles erreurs d'import.
+- `app.main` utilise un logger de module unique pour la journalisation HTTP, les exceptions et Socket.IO.
+- Les derniers appels `print` de débogage backend ont été remplacés par une journalisation structurée (`logging`) dans `app.config`, `app.api.documents` et `app.utils.dependencies`, afin d'être prêts pour la production et d'unifier les logs.
 
 ## Contribution
 

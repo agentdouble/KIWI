@@ -12,9 +12,11 @@ import logging
 
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
 )
+logger = logging.getLogger(__name__)
+
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
@@ -37,7 +39,6 @@ async def app_exception_handler(request: Request, exc: AppException):
 
 @app.exception_handler(SQLAlchemyError)
 async def database_exception_handler(request: Request, exc: SQLAlchemyError):
-    logger = logging.getLogger(__name__)
     logger.error(f"Database error: {str(exc)}", exc_info=True)
     return JSONResponse(
         status_code=500,
@@ -46,7 +47,6 @@ async def database_exception_handler(request: Request, exc: SQLAlchemyError):
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
-    logger = logging.getLogger(__name__)
     logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
     return JSONResponse(
         status_code=500,
@@ -64,7 +64,6 @@ app.add_middleware(
 
 @app.middleware("http")
 async def log_requests(request, call_next):
-    logger = logging.getLogger(__name__)
     logger.info(f"{request.method} {request.url.path}")
     logger.info(f"Headers: {dict(request.headers)}")
     response = await call_next(request)
@@ -78,7 +77,6 @@ sio = socketio.AsyncServer(
     engineio_logger=False
 )
 app.include_router(api_router, prefix="/api")
-logger = logging.getLogger(__name__)
 logger.info("=== Routes chargées ===")
 for route in app.routes:
     if hasattr(route, 'path'):
@@ -100,11 +98,9 @@ async def startup_event():
     # Garantir la présence des agents officiels
     try:
         from app.initial_data.official_agents import ensure_official_agents
-
         async with AsyncSessionLocal() as session:
             await ensure_official_agents(session)
     except Exception as exc:
-        logger = logging.getLogger(__name__)
         logger.error("Failed to ensure official agents: %s", exc, exc_info=True)
 
 @app.on_event("shutdown")
@@ -131,7 +127,6 @@ async def force_clear_session():
 
 @sio.event
 async def connect(sid, environ, auth=None):
-    logger = logging.getLogger(__name__)
     logger.info(f"Socket.IO Client connected: {sid}")
     if auth:
         logger.info(f"Auth data: {auth}")
@@ -139,7 +134,6 @@ async def connect(sid, environ, auth=None):
 
 @sio.event
 async def disconnect(sid):
-    logger = logging.getLogger(__name__)
     logger.info(f"Client disconnected: {sid}")
 
 @sio.event
