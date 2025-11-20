@@ -109,6 +109,8 @@ pip install uv
 uv sync
 uv run alembic upgrade head
 uv run python run.py
+# (Option développement) pour activer le rechargement automatique sans surveiller le dossier de stockage :
+# BACKEND_RELOAD=1 uv run python run.py
 
 # 4. Frontend (Terminal 2)
 cd frontend
@@ -187,6 +189,8 @@ EMBEDDING_MODEL=mistral-embed
 Le frontend se connecte automatiquement au backend via la variable d'environnement `VITE_BACKEND_URL` (par défaut `http://localhost:8077` dans `frontend/.env.example`), et est servi sur `VITE_FRONTEND_URL` (par défaut `http://localhost:8091`).
 
 Le module MCP PowerPoint (dossier `backend/mcp/powerpoint_mcp`) réutilise automatiquement cette configuration LLM du backend (`LLM_MODE`, `MISTRAL_API_KEY`, `VLLM_API_URL`, `VLLM_MODEL_NAME`) : vous n'avez donc à définir ces variables qu'une seule fois dans `backend/.env`.
+
+> Le reloader Uvicorn est désactivé par défaut pour éviter la création de multiples processus lors des écritures dans `./storage`. Activez-le seulement en développement via `BACKEND_RELOAD=1` (le dossier de stockage est exclu du watcher) si vous avez besoin du hot reload.
 
 ## Tests
 
