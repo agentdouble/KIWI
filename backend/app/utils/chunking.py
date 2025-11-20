@@ -9,6 +9,7 @@ def split_text_into_chunks(
     """
     Découpe un texte en chunks avec chevauchement, en essayant de couper proprement.
     Approche simple basée sur les caractères (robuste sans tokenizer).
+    Garantit toujours une progression pour éviter les boucles infinies.
     """
     if not text:
         return []
@@ -30,7 +31,9 @@ def split_text_into_chunks(
 
         # Essayer de couper au dernier séparateur raisonnable
         cut = max(candidate.rfind("\n\n"), candidate.rfind("\n"), candidate.rfind(". "))
-        if cut == -1 or (end == n):
+        # Si aucun séparateur utile ou si le séparateur est trop tôt (dans la zone de chevauchement),
+        # on coupe en fin de fenêtre pour garantir un avancement strict.
+        if cut == -1 or end == n or cut <= chunk_overlap:
             cut = len(candidate)
 
         chunk = candidate[:cut].strip()
@@ -41,9 +44,10 @@ def split_text_into_chunks(
             break
 
         # Avancer avec chevauchement
-        start = start + cut - chunk_overlap
-        if start < 0:
-            start = 0
+        next_start = start + cut - chunk_overlap
+        # Garde-fou supplémentaire: garantir une progression stricte
+        if next_start <= start:
+            next_start = start + max(1, chunk_size - chunk_overlap)
+        start = next_start
 
     return chunks
-

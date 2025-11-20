@@ -29,6 +29,7 @@ FoyerGPT est une plateforme moderne de chat IA qui permet aux utilisateurs de cr
 - Extraction de texte avec OCR pour les images
 - Intégration contextuelle dans les conversations
 - Support pour PDF, DOCX, TXT, MD, et images
+- Découpage robuste des documents en chunks pour le RAG (sans fuite mémoire, même sur des contenus contenant beaucoup de retours à la ligne)
 
 ### Modes LLM flexibles
 - **Mode API** : Intégration avec l'API Mistral
