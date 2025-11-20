@@ -150,7 +150,7 @@ async def _generate_powerpoint_from_text(args: Dict[str, Any]) -> CallToolResult
             content=[
                 TextContent(
                     type="text",
-                    text="Error: Mistral API key not configured. Please set MISTRAL_API_KEY environment variable."
+                    text="Error: LLM API key not configured. Please set API_KEY environment variable."
                 )
             ],
             isError=True

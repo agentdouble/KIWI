@@ -130,9 +130,11 @@ JWT_SECRET_KEY=your-jwt-secret-key-change-this-in-production
 # Mode LLM (api ou local)
 LLM_MODE=api
 
-# API IA (si mode api)
-MISTRAL_API_KEY=your-mistral-api-key
-MISTRAL_MODEL=mistral-small-latest
+# API IA (si mode api, OpenAI-compatible)
+API_URL=https://api.mistral.ai/v1/chat/completions
+API_KEY=your-api-key
+API_MODEL=mistral-small-latest
+MISTRAL_API_KEY=your-mistral-api-key   # pour les fonctionnalités spécifiques Mistral (embeddings, Pixtral, MCP, ...)
 PIXTRAL_MODEL=pixtral-large-latest
 
 # vLLM (si mode local)

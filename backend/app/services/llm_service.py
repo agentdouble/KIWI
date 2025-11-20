@@ -12,7 +12,7 @@ class LLMService:
 
     def __init__(self) -> None:
         if settings.is_api_mode:
-            logger.info("🌐 Initializing LLM Service in API mode (Mistral)")
+            logger.info("🌐 Initializing LLM Service in API mode (OpenAI-compatible HTTP API)")
             self._service = MistralService()
             self.mode = "api"
         else:
@@ -73,9 +73,8 @@ class LLMService:
     def model_name(self) -> str:
         """Retourne le nom du modèle utilisé"""
         if self.mode == "api":
-            return settings.mistral_model
+            return settings.api_model
         return settings.vllm_model_name
-
     @property
     def is_local_mode(self) -> bool:
         """Vérifie si on est en mode local"""

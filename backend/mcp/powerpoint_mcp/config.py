@@ -17,9 +17,10 @@ except Exception:
 
 
 class MistralConfig(BaseModel):
-    """Mistral API configuration."""
+    """LLM API configuration for the PowerPoint MCP (OpenAI-compatible)."""
     api_key: str = Field(default="")
-    model: str = Field(default="mistral-small-latest")
+    api_url: str = Field(default="https://api.mistral.ai/v1/chat/completions")
+    api_model: str = Field(default="mistral-small-latest")
     temperature: float = Field(default=0.3, ge=0.0, le=1.0)
     max_tokens: int = Field(default=128000, ge=1)
     top_p: float = Field(default=0.95, ge=0.0, le=1.0)
@@ -65,7 +66,7 @@ class AppConfig(BaseModel):
     debug: bool = Field(default_factory=lambda: os.getenv("DEBUG", "false").lower() == "true")
     
     def validate_api_key(self) -> bool:
-        """Check if Mistral API key is configured."""
+        """Check if LLM API key is configured."""
         return bool(self.mistral.api_key)
     
     @classmethod
@@ -99,13 +100,18 @@ class AppConfig(BaseModel):
                     # Keep default local_base_url; backend settings validation already guards vLLM config
                     pass
 
-            api_key = backend_settings.mistral_api_key or ""
+            # For API mode, reuse the generic LLM API configuration from backend settings
+            api_key = getattr(backend_settings, "api_key", "") or ""
+            api_url = getattr(backend_settings, "api_url", "https://api.mistral.ai/v1/chat/completions")
+            api_model = getattr(backend_settings, "api_model", "mistral-small-latest")
+
             if mode == "api" and not api_key:
-                raise ValueError("MISTRAL_API_KEY is required in API mode for PowerPoint configuration")
+                raise ValueError("API_KEY is required in API mode for PowerPoint configuration")
 
             mistral = MistralConfig(
                 api_key=api_key,
-                model=backend_settings.mistral_model,
+                api_url=api_url,
+                api_model=api_model,
                 temperature=float(os.getenv("MISTRAL_TEMPERATURE", "0.3")),
                 max_tokens=int(os.getenv("MISTRAL_MAX_TOKENS", "128000")),
                 mode=mode,
@@ -119,8 +125,9 @@ class AppConfig(BaseModel):
         else:
             # Standalone mode: use local environment variables
             mistral = MistralConfig(
-                api_key=os.getenv("MISTRAL_API_KEY", ""),
-                model=os.getenv("MISTRAL_MODEL", "mistral-small-latest"),
+                api_key=os.getenv("API_KEY", ""),
+                api_url=os.getenv("API_URL", "https://api.mistral.ai/v1/chat/completions"),
+                api_model=os.getenv("API_MODEL", "mistral-small-latest"),
                 temperature=float(os.getenv("MISTRAL_TEMPERATURE", "0.3")),
                 max_tokens=int(os.getenv("MISTRAL_MAX_TOKENS", "128000")),
                 mode=os.getenv("MISTRAL_MODE", "api"),

@@ -226,7 +226,7 @@ async def _generate_powerpoint_from_text(args: Dict[str, Any]) -> CallToolResult
     
     # Validate API key
     if not config.validate_api_key():
-        raise ValueError("Mistral API key not configured. Please set MISTRAL_API_KEY environment variable.")
+        raise ValueError("LLM API key not configured. Please set API_KEY environment variable.")
     
     # Initialize converter
     converter = PowerPointConverter()
@@ -372,7 +372,7 @@ async def main():
     
     # Check configuration
     if not config.validate_api_key():
-        logger.warning("Mistral API key not configured. Some tools may not work.")
+        logger.warning("LLM API key not configured (API_KEY). Some tools may not work.")
     
     # Run server
     async with server.run_server(

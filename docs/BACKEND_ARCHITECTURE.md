@@ -290,8 +290,9 @@ JWT_SECRET_KEY=your-secret-key
 LLM_MODE=api
 
 # Mode API
-MISTRAL_API_KEY=your-api-key
-MISTRAL_MODEL=mistral-small-latest
+API_URL=https://api.mistral.ai/v1/chat/completions
+API_KEY=your-api-key
+API_MODEL=mistral-small-latest
 PIXTRAL_MODEL=pixtral-large-latest
 
 # Mode local vLLM
@@ -325,7 +326,7 @@ class Settings(BaseSettings):
     # LLM
     llm_mode: str = "api"
     mistral_api_key: Optional[str]
-    mistral_model: str = "mistral-small-latest"
+    api_model: str = "mistral-small-latest"
     pixtral_model: str = "pixtral-large-latest"
     vllm_api_url: Optional[str]
     vllm_model_name: Optional[str]
