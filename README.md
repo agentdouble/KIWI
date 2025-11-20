@@ -61,8 +61,9 @@ FoyerGPT est une plateforme moderne de chat IA qui permet aux utilisateurs de cr
 │   │   ├── api/               # Routes API REST
 │   │   ├── models/            # Modèles SQLAlchemy
 │   │   ├── services/          # Logique métier
+│   │   ├── websocket/         # Gestion des connexions Socket.IO
 │   │   ├── config.py          # Configuration
-│   │   └── main.py            # Point d'entrée
+│   │   └── main.py            # Point d'entrée (composition FastAPI + Socket.IO)
 │   ├── alembic/               # Migrations de base de données
 │   └── tests/                 # Tests unitaires
 │
