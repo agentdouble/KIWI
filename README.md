@@ -29,6 +29,7 @@ FoyerGPT est une plateforme moderne de chat IA qui permet aux utilisateurs de cr
 - Extraction de texte avec OCR pour les images
 - Intégration contextuelle dans les conversations
 - Support pour PDF, DOCX, TXT, MD, et images
+- Découpage robuste des documents en chunks pour le RAG (sans fuite mémoire, même sur des contenus contenant beaucoup de retours à la ligne)
 
 ### Modes LLM flexibles
 - **Mode API** : Intégration avec l'API Mistral
@@ -109,6 +110,8 @@ pip install uv
 uv sync
 uv run alembic upgrade head
 uv run python run.py
+# (Option développement) pour activer le rechargement automatique sans surveiller le dossier de stockage :
+# BACKEND_RELOAD=1 uv run python run.py
 
 # 4. Frontend (Terminal 2)
 cd frontend
@@ -188,6 +191,8 @@ Le frontend se connecte automatiquement au backend via la variable d'environneme
 
 Le module MCP PowerPoint (dossier `backend/mcp/powerpoint_mcp`) réutilise automatiquement cette configuration LLM du backend (`LLM_MODE`, `MISTRAL_API_KEY`, `VLLM_API_URL`, `VLLM_MODEL_NAME`) : vous n'avez donc à définir ces variables qu'une seule fois dans `backend/.env`.
 
+> Le reloader Uvicorn est désactivé par défaut pour éviter la création de multiples processus lors des écritures dans `./storage`. Activez-le seulement en développement via `BACKEND_RELOAD=1` (le dossier de stockage est exclu du watcher) si vous avez besoin du hot reload.
+
 ## Tests
 
 ```bash
@@ -199,6 +204,13 @@ uv run pytest
 cd frontend
 npm test
 ```
+
+## Refactorisation backend
+
+- `app.services.llm_service.LLMService` centralise la délégation vers les modes API (`MistralService`) et local (`VLLMService`) tout en préservant le comportement existant.
+- `app.api.router.api_router` enregistre explicitement toutes les routes (y compris `auth`) au démarrage, ce qui évite de masquer d'éventuelles erreurs d'import.
+- `app.main` utilise un logger de module unique pour la journalisation HTTP, les exceptions et Socket.IO.
+- Les derniers appels `print` de débogage backend ont été remplacés par une journalisation structurée (`logging`) dans `app.config`, `app.api.documents` et `app.utils.dependencies`, afin d'être prêts pour la production et d'unifier les logs.
 
 ## Contribution
 
