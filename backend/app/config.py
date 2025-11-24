@@ -1,6 +1,6 @@
 from pydantic_settings import BaseSettings
 from typing import List, Literal, Optional, Union
-from pydantic import Field
+from pydantic import Field, AliasChoices
 import logging
 import os
 
@@ -25,7 +25,23 @@ class Settings(BaseSettings):
     # Mistral API (pour mode API)
     mistral_api_key: str = Field(default=None)
     mistral_model: str = "mistral-small-latest"
-    pixtral_model: str = "pixtral-large-latest"
+
+    # Vision model (API mode)
+    vision_model: str = Field(
+        default="pixtral-large-latest",
+        validation_alias=AliasChoices("VISION_MODEL", "VISION_API_MODEL", "PIXTRAL_MODEL"),
+        description="Nom du modèle de vision utilisé en mode API",
+    )
+    vision_api_url: str = Field(
+        default="https://api.mistral.ai/v1/chat/completions",
+        validation_alias=AliasChoices("VISION_API_URL"),
+        description="Endpoint compatible OpenAI pour le modèle de vision en mode API",
+    )
+    vision_api_key: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("VISION_API_KEY", "MISTRAL_API_KEY"),
+        description="Clé API pour le modèle de vision en mode API",
+    )
     
     # vLLM Configuration (pour mode local)
     vllm_api_url: str = "http://0.0.0.0:5263/v1/chat/completions"
@@ -34,9 +50,15 @@ class Settings(BaseSettings):
     vllm_temperature: float = 0.0
     vllm_timeout: int = 500  # secondes
     
-    # Pixtral vLLM Configuration (pour mode local avec images)
-    pixtral_vllm_url: str = "http://localhost:8085/v1/chat/completions"
-    pixtral_vllm_model: str = "pixtral-large-latest"
+    # Vision vLLM Configuration (pour mode local avec images)
+    vision_vllm_url: str = Field(
+        default="http://localhost:8085/v1/chat/completions",
+        validation_alias=AliasChoices("VISION_VLLM_URL", "PIXTRAL_VLLM_URL"),
+    )
+    vision_vllm_model: str = Field(
+        default="pixtral-large-latest",
+        validation_alias=AliasChoices("VISION_VLLM_MODEL", "PIXTRAL_VLLM_MODEL"),
+    )
     
     # App
     app_name: str = "FoyerGPT Backend"
@@ -71,8 +93,16 @@ class Settings(BaseSettings):
     admin_trigrammes_raw: Optional[str] = Field(default=None, alias="ADMIN_TRIGRAMMES")
     
     # PDF Processing
-    pdf_use_pixtral_threshold: int = 100  # Utiliser Pixtral si le texte extrait < 100 caractères
-    pdf_max_pages_pixtral: int = 0  # 0 = pas de limite; sinon borne supérieure
+    pdf_use_vision_threshold: int = Field(
+        default=100,
+        validation_alias=AliasChoices("PDF_USE_VISION_THRESHOLD", "PDF_USE_PIXTRAL_THRESHOLD"),
+        description="Basculer vers le modèle de vision si le texte extrait est inférieur au seuil",
+    )
+    pdf_max_pages_vision: int = Field(
+        default=0,
+        validation_alias=AliasChoices("PDF_MAX_PAGES_VISION", "PDF_MAX_PAGES_PIXTRAL"),
+        description="Nombre max de pages PDF à analyser avec le modèle de vision (0 = pas de limite)",
+    )
     
     # Embeddings / RAG
     embedding_provider: str = "mistral"  # valeurs supportées: "mistral", "local"
@@ -128,12 +158,18 @@ class Settings(BaseSettings):
                 self.mistral_api_key = os.getenv("MISTRAL_API_KEY")
                 if not self.mistral_api_key:
                     raise ValueError("MISTRAL_API_KEY environment variable is required in API mode")
+            if not self.vision_api_key:
+                self.vision_api_key = self.mistral_api_key
+            if not self.vision_api_key:
+                raise ValueError("VISION_API_KEY (ou MISTRAL_API_KEY) est requis pour le modèle de vision en mode API")
+            if not self.vision_api_url:
+                raise ValueError("VISION_API_URL est requis en mode API")
         elif self.llm_mode == "local":
             # En mode local, vérifier que l'URL vLLM est configurée
             if not self.vllm_api_url:
                 raise ValueError("vLLM_API_URL is required in local mode")
-            if not self.pixtral_vllm_url:
-                raise ValueError("PIXTRAL_VLLM_URL is required in local mode")
+            if not self.vision_vllm_url:
+                raise ValueError("VISION_VLLM_URL is required in local mode")
             # Log le mode pour confirmation
             logger.info("Running in LOCAL mode with vLLM at %s", self.vllm_api_url)
 
@@ -221,5 +257,9 @@ logger.info("Configuration loaded: LLM Mode = %s", settings.llm_mode)
 if settings.is_local_mode:
     logger.info("vLLM URL: %s", settings.vllm_api_url)
     logger.info("Model: %s", settings.vllm_model_name)
+    logger.info("Vision vLLM URL: %s", settings.vision_vllm_url)
+    logger.info("Vision vLLM Model: %s", settings.vision_vllm_model)
 else:
     logger.info("Mistral Model: %s", settings.mistral_model)
+    logger.info("Vision Model (API): %s", settings.vision_model)
+    logger.info("Vision API URL: %s", settings.vision_api_url)

@@ -170,20 +170,25 @@ LLM_MODE=api
 # Mode API (Mistral Cloud)
 MISTRAL_API_KEY=your-mistral-key
 MISTRAL_MODEL=mistral-small-latest
-PIXTRAL_MODEL=pixtral-large-latest
+VISION_MODEL=pixtral-large-latest
+# Optionnel : endpoint API custom compatible OpenAI (utile pour d'autres VLM)
+# VISION_API_URL=https://api.mistral.ai/v1/chat/completions
+# VISION_API_KEY=${MISTRAL_API_KEY}
 
-# Mode local (vLLM + Pixtral)
+# Mode local (vLLM + Vision)
 # Utilisez une URL joignable depuis le backend (localhost, IP privée, ...)
 VLLM_API_URL=http://localhost:5263/v1/chat/completions
 VLLM_MODEL_NAME=Mistral-Small-3.1-24B-Instruct-2503
-PIXTRAL_VLLM_URL=http://localhost:8085/v1/chat/completions
-PIXTRAL_VLLM_MODEL=pixtral-large-latest
+VISION_VLLM_URL=http://localhost:8085/v1/chat/completions
+VISION_VLLM_MODEL=pixtral-large-latest  # ex: internvl2-8b, minicpm-v, etc.
 
 # Embeddings
 EMBEDDING_PROVIDER=mistral  # automatique si LLM_MODE=api
 EMBEDDING_MODEL=mistral-embed
 # EMBEDDING_LOCAL_MODEL_PATH=/home/llama/models/base_models/bge-reranker-large (obligatoire si EMBEDDING_PROVIDER=local)
 ```
+
+Vous pouvez sélectionner n'importe quel modèle de vision compatible (MiniCPM, InternVL, etc.) en ajustant `VISION_MODEL` pour le mode API ou `VISION_VLLM_MODEL`/`VISION_VLLM_URL` pour le mode local directement dans votre `.env`.
 
 ### Configuration Frontend
 
