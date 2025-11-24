@@ -29,10 +29,17 @@ class VLLMService:
             label="Pixtral vLLM",
         )
         self.pixtral_model = settings.pixtral_vllm_model
+
+        # Contrôle de la vérification SSL pour les appels HTTP vers les LLM
+        self.verify_ssl = settings.llm_verify_ssl
         
         logger.info(f"vLLM Service initialized with URL: {self.api_url}")
         logger.info(f"Pixtral vLLM available at: {self.pixtral_url}")
         logger.info(f"Pixtral vLLM model configured as: {self.pixtral_model}")
+        logger.info(
+            "LLM SSL verification is %s",
+            "ENABLED" if self.verify_ssl else "DISABLED",
+        )
 
     @staticmethod
     def _normalize_client_url(url: str, *, label: str) -> str:
@@ -170,7 +177,7 @@ class VLLMService:
                 payload["tool_choice"] = "auto"
         
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with httpx.AsyncClient(timeout=self.timeout, verify=self.verify_ssl) as client:
                 logger.debug(f"Sending request to vLLM: {json.dumps(payload, indent=2)[:500]}...")
                 response = await client.post(self.api_url, json=payload, headers=headers)
                 
@@ -230,7 +237,7 @@ class VLLMService:
                 payload["tool_choice"] = "auto"
         
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with httpx.AsyncClient(timeout=self.timeout, verify=self.verify_ssl) as client:
                 response = await client.post(self.api_url, json=payload, headers=headers)
                 
                 if response.status_code == 200:
@@ -316,7 +323,7 @@ class VLLMService:
         }
         
         try:
-            async with httpx.AsyncClient(timeout=None) as client:  # Pas de timeout global pour le streaming
+            async with httpx.AsyncClient(timeout=None, verify=self.verify_ssl) as client:  # Pas de timeout global pour le streaming
                 async with client.stream('POST', self.api_url, json=payload, headers=headers) as response:
                     if response.status_code != 200:
                         error_msg = f"vLLM streaming failed with status {response.status_code}"
@@ -374,7 +381,7 @@ class VLLMService:
         }
         
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with httpx.AsyncClient(timeout=self.timeout, verify=self.verify_ssl) as client:
                 await self._sync_pixtral_model(client)
                 payload["model"] = self.pixtral_model
 
@@ -433,7 +440,7 @@ class VLLMService:
         try:
             # Essayer l'endpoint /health ou /v1/models selon vLLM
             health_url = self.api_url.replace("/chat/completions", "/models")
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with httpx.AsyncClient(timeout=5.0, verify=self.verify_ssl) as client:
                 response = await client.get(health_url)
                 return response.status_code == 200
         except Exception as e:
@@ -444,7 +451,7 @@ class VLLMService:
         """Vérifier que le serveur Pixtral vLLM est accessible"""
         try:
             health_url = self.pixtral_url.replace("/chat/completions", "/models")
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with httpx.AsyncClient(timeout=5.0, verify=self.verify_ssl) as client:
                 response = await client.get(health_url)
                 return response.status_code == 200
         except Exception as e:
