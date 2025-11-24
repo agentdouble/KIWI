@@ -167,6 +167,11 @@ JWT_SECRET_KEY=your-jwt-secret
 # Mode LLM (api ou local)
 LLM_MODE=api
 
+# SSL pour les appels LLM
+# true (par défaut) = vérifie les certificats SSL pour les endpoints HTTPS
+# false = désactive la vérification SSL (utile pour un vLLM distant avec certificat autosigné, à utiliser avec prudence)
+LLM_VERIFY_SSL=true
+
 # Mode API (Mistral Cloud)
 MISTRAL_API_KEY=your-mistral-key
 MISTRAL_MODEL=mistral-small-latest
