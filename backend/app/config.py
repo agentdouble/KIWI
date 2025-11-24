@@ -37,6 +37,12 @@ class Settings(BaseSettings):
     # Pixtral vLLM Configuration (pour mode local avec images)
     pixtral_vllm_url: str = "http://localhost:8085/v1/chat/completions"
     pixtral_vllm_model: str = "pixtral-large-latest"
+
+    # SSL pour les appels LLM (vLLM, Pixtral, etc.)
+    llm_verify_ssl: bool = Field(
+        default=True,
+        description="Vérifie les certificats SSL pour les appels HTTP vers les LLM (définissable via LLM_VERIFY_SSL).",
+    )
     
     # App
     app_name: str = "FoyerGPT Backend"
