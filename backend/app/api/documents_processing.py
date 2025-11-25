@@ -19,7 +19,8 @@ async def reprocess_document(
     session = Depends(get_current_session)
 ):
     """
-    Relance le traitement d'un document, utile pour régénérer les transcripts d'images avec Pixtral
+    Relance le traitement d'un document, utile pour régénérer les transcripts d'images
+    avec le modèle de vision configuré (Pixtral, MiniCPM, InternVL, ...).
     """
     # Vérifier que le document existe
     document = await document_service.get_document(db, document_id)
@@ -53,7 +54,8 @@ async def reprocess_all_images(
     session = Depends(get_current_session)
 ):
     """
-    Relance le traitement de toutes les images pour régénérer les transcripts avec Pixtral
+    Relance le traitement de toutes les images pour régénérer les transcripts
+    avec le modèle de vision configuré.
     """
     from sqlalchemy import select, and_, or_
     

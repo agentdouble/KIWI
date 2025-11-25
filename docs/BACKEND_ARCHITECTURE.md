@@ -292,14 +292,15 @@ LLM_MODE=api
 # Mode API
 MISTRAL_API_KEY=your-api-key
 MISTRAL_MODEL=mistral-small-latest
-PIXTRAL_MODEL=pixtral-large-latest
+# Modèle de vision utilisé via l'API (ex: pixtral-large-latest)
+VISION_MODEL=pixtral-large-latest
 
 # Mode local vLLM
 # Utilisez une URL joignable par le backend (localhost, IP interne, ...)
 VLLM_API_URL=http://localhost:5263/v1/chat/completions
 VLLM_MODEL_NAME=Mistral-Small-3.1-24B-Instruct-2503
-PIXTRAL_VLLM_URL=http://localhost:8085/v1/chat/completions
-PIXTRAL_VLLM_MODEL=pixtral-large-latest
+VISION_VLLM_URL=http://localhost:8085/v1/chat/completions
+VISION_VLLM_MODEL=pixtral-large-latest
 
 # Embeddings
 EMBEDDING_PROVIDER=mistral  # automatique si LLM_MODE=api
@@ -326,11 +327,11 @@ class Settings(BaseSettings):
     llm_mode: str = "api"
     mistral_api_key: Optional[str]
     mistral_model: str = "mistral-small-latest"
-    pixtral_model: str = "pixtral-large-latest"
+    vision_model: str = "pixtral-large-latest"
     vllm_api_url: Optional[str]
     vllm_model_name: Optional[str]
-    pixtral_vllm_url: Optional[str]
-    pixtral_vllm_model: Optional[str]
+    vision_vllm_url: Optional[str]
+    vision_vllm_model: Optional[str]
     
     # Application
     app_env: str = "development"

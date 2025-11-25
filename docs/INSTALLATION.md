@@ -133,14 +133,14 @@ LLM_MODE=api
 # API IA (si mode api)
 MISTRAL_API_KEY=your-mistral-api-key
 MISTRAL_MODEL=mistral-small-latest
-PIXTRAL_MODEL=pixtral-large-latest
+VISION_MODEL=pixtral-large-latest
 
 # vLLM (si mode local)
 # Utilisez une URL joignable par le backend (localhost, IP interne, ...)
 VLLM_API_URL=http://localhost:5263/v1/chat/completions
 VLLM_MODEL_NAME=Mistral-Small-3.1-24B-Instruct-2503
-PIXTRAL_VLLM_URL=http://localhost:8085/v1/chat/completions
-PIXTRAL_VLLM_MODEL=pixtral-large-latest
+VISION_VLLM_URL=http://localhost:8085/v1/chat/completions
+VISION_VLLM_MODEL=pixtral-large-latest
 
 # Embeddings
 EMBEDDING_PROVIDER=mistral  # automatique si LLM_MODE=api

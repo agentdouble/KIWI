@@ -15,33 +15,21 @@ import logging
 from zipfile import ZipFile
 
 
-async def _call_pixtral_api(messages):
-    """Appelle le modèle Pixtral avec fallback si le modèle configuré est invalide."""
+async def _call_vision_api(messages):
+    """
+    Appelle le modèle de vision configuré via l'API (ex: Pixtral, MiniCPM, InternVL).
+    La sélection du modèle est entièrement pilotée par la configuration.
+    """
     from app.config import settings
 
     client = Mistral(api_key=settings.mistral_api_key)
-    preferred_model = settings.pixtral_model
-    fallback_model = "pixtral-large-latest"
+    model_name = settings.vision_model
 
-    async def _invoke(model_name: str):
-        return await asyncio.to_thread(
-            client.chat.complete,
-            model=model_name,
-            messages=messages,
-        )
-
-    try:
-        return await _invoke(preferred_model)
-    except Exception as e:
-        message = str(e)
-        if "invalid_model" in message and preferred_model != fallback_model:
-            logger.warning(
-                "❗ Modèle Pixtral %s invalide, tentative avec fallback %s",
-                preferred_model,
-                fallback_model,
-            )
-            return await _invoke(fallback_model)
-        raise
+    return await asyncio.to_thread(
+        client.chat.complete,
+        model=model_name,
+        messages=messages,
+    )
 
 # Configurer le logger
 logger = logging.getLogger(__name__)
@@ -117,7 +105,7 @@ async def process_document_to_text(
         )
         return content
     elif ext in ['.png', '.jpg', '.jpeg', '.gif', '.webp'] or 'image' in file_type:
-        return await _process_image_file_with_pixtral(file_path, progress_callback=progress_callback)
+        return await _process_image_file_with_vision_model(file_path, progress_callback=progress_callback)
     else:
         # Par défaut, essayer de lire comme texte
         content = await _process_text_file(file_path)
@@ -204,51 +192,55 @@ async def _process_pdf_file(
     loop = asyncio.get_event_loop()
     extracted_text, has_potential_images = await loop.run_in_executor(None, extract_pdf_text)
     
-    # Si le PDF semble contenir des images ou peu de texte, utiliser Pixtral
+    # Si le PDF semble contenir des images ou peu de texte, utiliser le modèle de vision
     if has_potential_images or len(extracted_text.strip()) < settings.pdf_use_pixtral_threshold:
-        logger.info(f"📊 PDF nécessite Pixtral - Texte extrait: {len(extracted_text.strip())} caractères (seuil: {settings.pdf_use_pixtral_threshold})")
+        logger.info(
+            "📊 PDF nécessite une analyse visuelle - Texte extrait: %d caractères (seuil: %d)",
+            len(extracted_text.strip()),
+            settings.pdf_use_pixtral_threshold,
+        )
         if has_potential_images:
             logger.info("🖼️ Images détectées dans le PDF")
         
         try:
-            pixtral_text = await _process_pdf_with_pixtral(
+            vision_text = await _process_pdf_with_vision_model(
                 file_path,
                 max_pages=settings.pdf_max_pages_pixtral,
                 progress_callback=progress_callback,
             )
             # Combiner les deux approches si on a du texte des deux côtés
-            if extracted_text.strip() and pixtral_text.strip():
-                logger.info(f"🔀 Combinaison extraction texte + Pixtral")
+            if extracted_text.strip() and vision_text.strip():
+                logger.info("🔀 Combinaison extraction texte + modèle de vision")
                 await _emit_progress(
                     progress_callback,
                     {
                         "stage": "vision_analysis",
-                        "stage_label": "Analyse visuelle (Pixtral)",
+                        "stage_label": "Analyse visuelle (modèle de vision)",
                         "progress": 0.7,
                         "message": "Analyse visuelle terminée",
                     },
                 )
                 return (
-                    "=== Analyse visuelle (Pixtral) ===\n"
-                    f"{pixtral_text}\n\n"
+                    "=== Analyse visuelle (modèle de vision) ===\n"
+                    f"{vision_text}\n\n"
                     "=== Texte extrait ===\n"
                     f"{extracted_text}"
                 )
-            elif pixtral_text.strip():
-                logger.info(f"🎨 Utilisation Pixtral seul")
+            elif vision_text.strip():
+                logger.info("🎨 Utilisation du modèle de vision seul")
                 await _emit_progress(
                     progress_callback,
                     {
                         "stage": "vision_analysis",
-                        "stage_label": "Analyse visuelle (Pixtral)",
+                        "stage_label": "Analyse visuelle (modèle de vision)",
                         "progress": 0.7,
                         "message": "Analyse visuelle terminée",
                     },
                 )
-                return pixtral_text
+                return vision_text
         except Exception as e:
-            logger.error(f"❌ Erreur traitement PDF avec Pixtral: {e}")
-            # Fallback sur le texte extrait
+            logger.error("❌ Erreur traitement PDF avec le modèle de vision: %s", e)
+            # Fallback sur le texte extrait uniquement
     else:
         logger.info(f"📝 PDF traité avec extraction de texte simple ({len(extracted_text.strip())} caractères)")
     await _emit_progress(
@@ -327,7 +319,7 @@ async def _process_docx_file(
                         progress_callback,
                         {
                             "stage": "vision_analysis",
-                            "stage_label": "Analyse visuelle (Pixtral)",
+                            "stage_label": "Analyse visuelle (modèle de vision)",
                             "current": 0,
                             "total": total_images,
                             "progress": progress_start,
@@ -349,7 +341,7 @@ async def _process_docx_file(
                                 continue
 
                             try:
-                                transcription = await _process_image_file_with_pixtral(
+                                transcription = await _process_image_file_with_vision_model(
                                     image_path,
                                     progress_callback=progress_callback,
                                     position=idx,
@@ -363,7 +355,7 @@ async def _process_docx_file(
                                     progress_callback,
                                     {
                                         "stage": "vision_analysis",
-                                        "stage_label": "Analyse visuelle (Pixtral)",
+                                        "stage_label": "Analyse visuelle (modèle de vision)",
                                         "current": idx,
                                         "total": total_images,
                                         "progress": progress_start + (idx / max(total_images, 1)) * progress_span,
@@ -371,14 +363,14 @@ async def _process_docx_file(
                                     },
                                 )
                             except Exception as e:
-                                logger.error(f"❌ Erreur lors de l'analyse Pixtral de l'image DOCX {name}: {e}")
+                                logger.error("❌ Erreur lors de l'analyse de l'image DOCX %s avec le modèle de vision: %s", name, e)
 
                 if skipped_small:
                     await _emit_progress(
                         progress_callback,
                         {
                             "stage": "vision_analysis",
-                            "stage_label": "Analyse visuelle (Pixtral)",
+                            "stage_label": "Analyse visuelle (modèle de vision)",
                             "progress": progress_start,
                             "message": f"{skipped_small} image(s) ignorée(s) car trop petites",
                         },
@@ -391,14 +383,14 @@ async def _process_docx_file(
             progress_callback,
             {
                 "stage": "vision_analysis",
-                "stage_label": "Analyse visuelle (Pixtral)",
+                "stage_label": "Analyse visuelle (modèle de vision)",
                 "progress": 0.7,
                 "message": "Analyse visuelle terminée",
             },
         )
         if text_content.strip():
             return (
-                "=== Analyse visuelle (Pixtral) ===\n"
+                "=== Analyse visuelle (modèle de vision) ===\n"
                 + "\n\n".join(image_sections)
                 + "\n\n=== Texte extrait ===\n"
                 + text_content
@@ -423,16 +415,16 @@ async def _process_rtf_file(file_path: Path) -> str:
     # Dans un cas réel, utiliser striprtf ou python-rtf
     return await _process_text_file(file_path)
 
-async def _process_image_file_with_pixtral(
+async def _process_image_file_with_vision_model(
     file_path: Path,
     progress_callback: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None,
     position: Optional[int] = None,
     total: Optional[int] = None,
 ) -> str:
-    """Utilise Pixtral pour analyser et transcrire le contenu d'une image"""
+    """Utilise le modèle de vision configuré pour analyser et transcrire le contenu d'une image"""
     from app.config import settings
     
-    logger.info(f"🎨 Début analyse Pixtral pour: {file_path.name}")
+    logger.info("🎨 Début analyse visuelle pour: %s", file_path.name)
     single_asset = position is None or total is None
     progress_start = 0.2 if single_asset else None
     progress_end = 0.7 if single_asset else None
@@ -441,7 +433,7 @@ async def _process_image_file_with_pixtral(
             progress_callback,
             {
                 "stage": "vision_analysis",
-                "stage_label": "Analyse visuelle (Pixtral)",
+                "stage_label": "Analyse visuelle (modèle de vision)",
                 "current": 0,
                 "total": 1,
                 "progress": progress_start,
@@ -470,8 +462,8 @@ async def _process_image_file_with_pixtral(
     
     # Déterminer si on utilise le mode API ou local
     if settings.llm_mode == "local":
-        # Mode local : utiliser vLLM avec Pixtral
-        logger.info(f"🚀 Utilisation de Pixtral local (vLLM)")
+        # Mode local : utiliser vLLM avec le modèle de vision configuré
+        logger.info("🚀 Utilisation du modèle de vision local (vLLM)")
         from app.services.vllm_service import VLLMService
         
         try:
@@ -489,14 +481,14 @@ async def _process_image_file_with_pixtral(
                 "Résumé, Informations clés)."
             )
             
-            result = await vllm_service.process_image_with_pixtral(base64_image, prompt)
-            logger.info(f"✅ Pixtral local a retourné {len(result)} caractères")
-            logger.info(f"📄 Aperçu: {result[:200]}...")
+            result = await vllm_service.process_image_with_vision_model(base64_image, prompt)
+            logger.info("✅ Modèle de vision local a retourné %d caractères", len(result))
+            logger.info("📄 Aperçu: %s...", result[:200])
             await _emit_progress(
                 progress_callback,
                 {
                     "stage": "vision_analysis",
-                    "stage_label": "Analyse visuelle (Pixtral)",
+                    "stage_label": "Analyse visuelle (modèle de vision)",
                     "current": position or 1,
                     "total": total or 1,
                     "progress": progress_end,
@@ -506,16 +498,16 @@ async def _process_image_file_with_pixtral(
             return result
             
         except Exception as e:
-            logger.error(f"❌ Erreur Pixtral local: {str(e)}", exc_info=True)
-            return f"Erreur lors de l'analyse de l'image avec Pixtral local: {str(e)}"
+            logger.error("❌ Erreur du modèle de vision local: %s", e, exc_info=True)
+            return f"Erreur lors de l'analyse de l'image avec le modèle de vision local: {str(e)}"
     else:
         # Mode API : utiliser Mistral API
-        logger.info(f"🚀 Appel API Pixtral avec modèle: {settings.pixtral_model}")
+        logger.info("🚀 Appel API du modèle de vision: %s", settings.vision_model)
         # Construire l'URL data de l'image
         image_url = f"data:{mime_type};base64,{base64_image}"
         
         try:
-            response = await _call_pixtral_api(
+            response = await _call_vision_api(
                 [
                     {
                         "role": "user",
@@ -540,13 +532,13 @@ async def _process_image_file_with_pixtral(
             # Extraire la transcription de la réponse
             if response.choices and len(response.choices) > 0:
                 result = response.choices[0].message.content
-                logger.info(f"✅ Pixtral API a retourné {len(result)} caractères")
-                logger.info(f"📄 Aperçu: {result[:200]}...")
+                logger.info("✅ Modèle de vision API a retourné %d caractères", len(result))
+                logger.info("📄 Aperçu: %s...", result[:200])
                 await _emit_progress(
                     progress_callback,
                     {
                         "stage": "vision_analysis",
-                        "stage_label": "Analyse visuelle (Pixtral)",
+                        "stage_label": "Analyse visuelle (modèle de vision)",
                         "current": position or 1,
                         "total": total or 1,
                         "progress": progress_end,
@@ -555,31 +547,31 @@ async def _process_image_file_with_pixtral(
                 )
                 return result
             else:
-                logger.error("❌ Pixtral API n'a retourné aucune réponse")
-                return "Erreur: Aucune transcription générée par Pixtral"
+                logger.error("❌ L'API du modèle de vision n'a retourné aucune réponse")
+                return "Erreur: Aucune transcription générée par le modèle de vision"
             
         except Exception as e:
-            logger.error(f"❌ Erreur Pixtral: {str(e)}", exc_info=True)
-            return f"Erreur lors de l'analyse de l'image avec Pixtral: {str(e)}"
+            logger.error("❌ Erreur lors de l'appel au modèle de vision: %s", e, exc_info=True)
+            return f"Erreur lors de l'analyse de l'image avec le modèle de vision: {str(e)}"
 
-async def _process_pdf_with_pixtral(
+async def _process_pdf_with_vision_model(
     file_path: Path,
     max_pages: int = 0,
     progress_callback: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None,
 ) -> str:
-    """Convertit les pages PDF en images et les analyse avec Pixtral"""
+    """Convertit les pages PDF en images et les analyse avec le modèle de vision configuré"""
     from app.config import settings
     
-    logger.info(f"📑 Début traitement PDF avec Pixtral: {file_path.name}")
+    logger.info("📑 Début traitement PDF avec modèle de vision: %s", file_path.name)
     logger.info(f"🔧 Mode LLM: {settings.llm_mode}")
     
     # Initialiser le service approprié selon le mode
     if settings.llm_mode == "local":
         from app.services.vllm_service import VLLMService
         vllm_service = VLLMService()
-        logger.info("📊 Utilisation de Pixtral local pour PDF")
+        logger.info("📊 Utilisation du modèle de vision local pour PDF")
     else:
-        logger.info(f"📊 Utilisation de Pixtral API pour PDF (modèle: {settings.pixtral_model})")
+        logger.info("📊 Utilisation de l'API du modèle de vision pour PDF (modèle: %s)", settings.vision_model)
     
     results = []
     
@@ -607,7 +599,7 @@ async def _process_pdf_with_pixtral(
                 progress_callback,
                 {
                     "stage": "vision_analysis",
-                    "stage_label": "Analyse visuelle (Pixtral)",
+                    "stage_label": "Analyse visuelle (modèle de vision)",
                     "current": 0,
                     "total": total_pages,
                     "progress": progress_start,
@@ -615,14 +607,14 @@ async def _process_pdf_with_pixtral(
                 },
             )
             
-            # Traiter chaque page avec Pixtral
+            # Traiter chaque page avec le modèle de vision
             for i, image in enumerate(images):
                 logger.info(f"📄 Traitement page {i+1}/{total_pages}...")
                 await _emit_progress(
                     progress_callback,
                     {
                         "stage": "vision_analysis",
-                        "stage_label": "Analyse visuelle (Pixtral)",
+                        "stage_label": "Analyse visuelle (modèle de vision)",
                         "current": i,
                         "total": total_pages,
                         "progress": progress_start + (i / max(total_pages, 1)) * progress_span,
@@ -638,7 +630,7 @@ async def _process_pdf_with_pixtral(
                     image_data = await f.read()
                     base64_image = base64.b64encode(image_data).decode('utf-8')
                 
-                # Analyser avec Pixtral (API ou local selon le mode)
+                # Analyser avec le modèle de vision (API ou local selon le mode)
                 try:
                     prompt = (
                         f"Analyse la page {i+1} de ce PDF en suivant les directives suivantes : identifie d'abord le type de "
@@ -656,11 +648,11 @@ async def _process_pdf_with_pixtral(
 
                     if settings.llm_mode == "local":
                         # Mode local : utiliser vLLM
-                        page_content = await vllm_service.process_image_with_pixtral(base64_image, prompt)
+                        page_content = await vllm_service.process_image_with_vision_model(base64_image, prompt)
                     else:
                         # Mode API : utiliser Mistral
                         image_url = f"data:image/png;base64,{base64_image}"
-                        response = await _call_pixtral_api(
+                        response = await _call_vision_api(
                             [
                                 {
                                     "role": "user",
@@ -683,8 +675,8 @@ async def _process_pdf_with_pixtral(
                     if page_content:
                         results.append(f"\n=== Page {i+1} ===\n{page_content}")
                     else:
-                        logger.warning("Pixtral n'a renvoyé aucun contenu pour la page %d", i + 1)
-                        raise RuntimeError("La réponse Pixtral est vide")
+                        logger.warning("Le modèle de vision n'a renvoyé aucun contenu pour la page %d", i + 1)
+                        raise RuntimeError("La réponse du modèle de vision est vide")
 
                 except Exception as e:
                     results.append(f"\n=== Page {i+1} ===\nErreur lors de l'analyse: {str(e)}")
@@ -694,7 +686,7 @@ async def _process_pdf_with_pixtral(
                         progress_callback,
                         {
                             "stage": "vision_analysis",
-                            "stage_label": "Analyse visuelle (Pixtral)",
+                            "stage_label": "Analyse visuelle (modèle de vision)",
                             "current": current_page,
                             "total": total_pages,
                             "progress": progress_start + (current_page / max(total_pages, 1)) * progress_span,
@@ -715,7 +707,7 @@ async def _process_pdf_with_pixtral(
         progress_callback,
         {
             "stage": "vision_analysis",
-            "stage_label": "Analyse visuelle (Pixtral)",
+            "stage_label": "Analyse visuelle (modèle de vision)",
             "progress": 0.7,
             "message": "Analyse visuelle terminée",
         },

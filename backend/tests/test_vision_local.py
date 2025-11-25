@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Test script pour vérifier l'intégration de Pixtral en mode local avec vLLM
+Test script pour vérifier l'intégration du modèle de vision en mode local avec vLLM.
+Permet de tester n'importe quel VLM (Pixtral, MiniCPM, InternVL, ...) exposé via vLLM.
 """
 
 import asyncio
@@ -18,13 +19,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-async def test_pixtral_local():
-    """Test de l'analyse d'image avec Pixtral en mode local"""
+async def test_vision_local():
+    """Test de l'analyse d'image avec le modèle de vision en mode local"""
     
     print(f"\n🔧 Configuration actuelle:")
     print(f"   - Mode LLM: {settings.llm_mode}")
-    print(f"   - Pixtral vLLM URL: {settings.pixtral_vllm_url}")
-    print(f"   - Pixtral vLLM Model: {settings.pixtral_vllm_model}")
+    print(f"   - Vision vLLM URL: {settings.vision_vllm_url}")
+    print(f"   - Vision vLLM Model: {settings.vision_vllm_model}")
     
     # Vérifier qu'on est bien en mode local
     if settings.llm_mode != "local":
@@ -52,21 +53,21 @@ async def test_pixtral_local():
     print("\n🚀 Initialisation du service vLLM...")
     vllm_service = VLLMService()
     
-    # Vérifier la santé du service Pixtral
-    print("\n🏥 Vérification de la santé du service Pixtral...")
-    is_healthy = await vllm_service.pixtral_health_check()
+    # Vérifier la santé du service de vision
+    print("\n🏥 Vérification de la santé du service de vision...")
+    is_healthy = await vllm_service.vision_health_check()
     if is_healthy:
-        print("✅ Service Pixtral vLLM accessible")
+        print("✅ Service de vision vLLM accessible")
     else:
-        print("❌ Service Pixtral vLLM inaccessible")
-        print(f"   Vérifiez que le serveur est lancé sur {settings.pixtral_vllm_url}")
+        print("❌ Service de vision vLLM inaccessible")
+        print(f"   Vérifiez que le serveur est lancé sur {settings.vision_vllm_url}")
         return
     
     # Tester l'analyse d'image
-    print("\n🎨 Test d'analyse d'image avec Pixtral local...")
+    print("\n🎨 Test d'analyse d'image avec le modèle de vision local...")
     try:
         prompt = "Décris cette image en détail. Qu'est-ce que tu vois ?"
-        result = await vllm_service.process_image_with_pixtral(image_base64, prompt)
+        result = await vllm_service.process_image_with_vision_model(image_base64, prompt)
         
         print("\n✅ Analyse réussie !")
         print(f"\n📝 Résultat ({len(result)} caractères):")
@@ -80,10 +81,10 @@ async def test_pixtral_local():
         traceback.print_exc()
 
 async def test_pdf_processing():
-    """Test du traitement PDF avec Pixtral local"""
+    """Test du traitement PDF avec le modèle de vision local"""
     from app.utils.document_processors import process_document_to_text
     
-    print("\n\n📄 Test de traitement PDF avec Pixtral local...")
+    print("\n\n📄 Test de traitement PDF avec modèle de vision local...")
     
     # Chercher un PDF de test
     test_pdf_path = Path("test_document.pdf")
@@ -108,11 +109,11 @@ async def test_pdf_processing():
 
 async def main():
     """Fonction principale de test"""
-    print("🧪 Test de Pixtral en mode local avec vLLM")
+    print("🧪 Test du modèle de vision en mode local avec vLLM")
     print("=" * 60)
     
     # Test 1: Analyse d'image simple
-    await test_pixtral_local()
+    await test_vision_local()
     
     # Test 2: Traitement PDF (optionnel)
     # await test_pdf_processing()
@@ -120,5 +121,5 @@ async def main():
     print("\n\n✅ Tests terminés !")
 
 if __name__ == "__main__":
-    # Pour exécuter: python test_pixtral_local.py
+    # Pour exécuter: python test_vision_local.py
     asyncio.run(main())

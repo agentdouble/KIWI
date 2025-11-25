@@ -25,7 +25,8 @@ class Settings(BaseSettings):
     # Mistral API (pour mode API)
     mistral_api_key: str = Field(default=None)
     mistral_model: str = "mistral-small-latest"
-    pixtral_model: str = "pixtral-large-latest"
+    # Modèle de vision utilisé en mode API (ex: Pixtral, autre VLM supporté par le provider)
+    vision_model: str = "pixtral-large-latest"
     
     # vLLM Configuration (pour mode local)
     vllm_api_url: str = "http://0.0.0.0:5263/v1/chat/completions"
@@ -34,9 +35,10 @@ class Settings(BaseSettings):
     vllm_temperature: float = 0.0
     vllm_timeout: int = 500  # secondes
     
-    # Pixtral vLLM Configuration (pour mode local avec images)
-    pixtral_vllm_url: str = "http://localhost:8085/v1/chat/completions"
-    pixtral_vllm_model: str = "pixtral-large-latest"
+    # Vision vLLM Configuration (pour mode local avec images)
+    # Permet d'utiliser n'importe quel VLM compatible (Pixtral, MiniCPM, InternVL, ...)
+    vision_vllm_url: str = "http://localhost:8085/v1/chat/completions"
+    vision_vllm_model: str = "pixtral-large-latest"
     
     # App
     app_name: str = "FoyerGPT Backend"
@@ -71,9 +73,11 @@ class Settings(BaseSettings):
     admin_trigrammes_raw: Optional[str] = Field(default=None, alias="ADMIN_TRIGRAMMES")
     
     # PDF Processing
-    pdf_use_pixtral_threshold: int = 100  # Utiliser Pixtral si le texte extrait < 100 caractères
+    # Les paramètres gardent le préfixe historique "pixtral" mais contrôlent
+    # simplement quand utiliser le modèle de vision pour analyser un PDF.
+    pdf_use_pixtral_threshold: int = 100  # Utiliser le modèle de vision si le texte extrait < 100 caractères
     pdf_max_pages_pixtral: int = 0  # 0 = pas de limite; sinon borne supérieure
-    
+
     # Embeddings / RAG
     embedding_provider: str = "mistral"  # valeurs supportées: "mistral", "local"
     embedding_model: str = "mistral-embed"
@@ -128,14 +132,34 @@ class Settings(BaseSettings):
                 self.mistral_api_key = os.getenv("MISTRAL_API_KEY")
                 if not self.mistral_api_key:
                     raise ValueError("MISTRAL_API_KEY environment variable is required in API mode")
+            # Configuration du modèle de vision en mode API
+            # Priorité aux nouvelles variables VISION_*, avec compatibilité PIXTRAL_*
+            env_vision_model = os.getenv("VISION_MODEL") or os.getenv("PIXTRAL_MODEL")
+            if env_vision_model:
+                self.vision_model = env_vision_model
         elif self.llm_mode == "local":
             # En mode local, vérifier que l'URL vLLM est configurée
             if not self.vllm_api_url:
                 raise ValueError("vLLM_API_URL is required in local mode")
-            if not self.pixtral_vllm_url:
-                raise ValueError("PIXTRAL_VLLM_URL is required in local mode")
+            # Permettre la configuration de l'URL du modèle de vision via VISION_VLLM_URL,
+            # avec compatibilité vers l'ancienne variable PIXTRAL_VLLM_URL.
+            env_vision_vllm_url = os.getenv("VISION_VLLM_URL") or os.getenv("PIXTRAL_VLLM_URL")
+            if env_vision_vllm_url:
+                self.vision_vllm_url = env_vision_vllm_url
+            if not self.vision_vllm_url:
+                raise ValueError("VISION_VLLM_URL is required in local mode")
+
+            env_vision_vllm_model = os.getenv("VISION_VLLM_MODEL") or os.getenv("PIXTRAL_VLLM_MODEL")
+            if env_vision_vllm_model:
+                self.vision_vllm_model = env_vision_vllm_model
+
             # Log le mode pour confirmation
-            logger.info("Running in LOCAL mode with vLLM at %s", self.vllm_api_url)
+            logger.info(
+                "Running in LOCAL mode with vLLM at %s (vision: %s, model: %s)",
+                self.vllm_api_url,
+                self.vision_vllm_url,
+                self.vision_vllm_model,
+            )
 
         # Synchroniser provider d'embeddings avec le mode LLM si explicite
         env_provider = os.getenv("EMBEDDING_PROVIDER")

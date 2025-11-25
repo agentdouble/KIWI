@@ -281,9 +281,9 @@ class DocumentService:
         try:
             logger.info(f"Calling processor for {document.file_type}")
             if 'image' in document.file_type or document.original_filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
-                logger.info(f"Processing image with Pixtral")
+                logger.info("Processing image with configured vision model")
             elif document.original_filename.lower().endswith('.pdf'):
-                logger.info(f"Processing PDF (text extraction + Pixtral if needed)")
+                logger.info("Processing PDF (text extraction + vision model if needed)")
 
             async def progress_callback(update: Dict[str, Any]):
                 try:
