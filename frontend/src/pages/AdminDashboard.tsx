@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { useToast } from '@/providers/ToastProvider'
 import { adminService } from '@/lib/api/services/admin.service'
 import { alertService } from '@/lib/api/services/alert.service'
@@ -16,6 +18,8 @@ import {
   User,
   Users,
   Plus,
+  KeyRound,
+  UserPlus,
 } from 'lucide-react'
 
 const formatHour = (isoDate: string) => {
@@ -57,6 +61,10 @@ const UserManagementTab = ({ isActive }: UserManagementTabProps) => {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null)
+  const [createForm, setCreateForm] = useState({ email: '', trigramme: '', temporaryPassword: '' })
+  const [resetForm, setResetForm] = useState({ userId: '', temporaryPassword: '' })
+  const [isCreating, setIsCreating] = useState(false)
+  const [isResetting, setIsResetting] = useState(false)
   const { showToast } = useToast()
 
   const fetchUsers = useCallback(async () => {
@@ -65,6 +73,7 @@ const UserManagementTab = ({ isActive }: UserManagementTabProps) => {
       setError(null)
       const data = await adminService.getUsers()
       setUsers(data)
+      setResetForm(prev => ({ ...prev, userId: prev.userId || (data[0]?.id ?? '') }))
     } catch {
       setError("Impossible de récupérer les utilisateurs. Veuillez réessayer plus tard.")
     } finally {
@@ -100,6 +109,74 @@ const UserManagementTab = ({ isActive }: UserManagementTabProps) => {
     }
   }
 
+  const generateTemporaryPassword = () => crypto.randomUUID().replace(/-/g, '').slice(0, 12)
+
+  const handleCreateUser = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+
+    if (!createForm.email.trim() || !createForm.trigramme.trim() || !createForm.temporaryPassword.trim()) {
+      setError('Tous les champs sont obligatoires pour créer un utilisateur.')
+      return
+    }
+
+    if (createForm.trigramme.trim().length !== 3) {
+      setError('Le trigramme doit contenir exactement 3 lettres.')
+      return
+    }
+
+    if (createForm.temporaryPassword.length < 8) {
+      setError('Le mot de passe temporaire doit contenir au moins 8 caractères.')
+      return
+    }
+
+    setIsCreating(true)
+    try {
+      const newUser = await adminService.createUser({
+        email: createForm.email.trim(),
+        trigramme: createForm.trigramme.trim(),
+        temporary_password: createForm.temporaryPassword,
+      })
+      setUsers(prev => [newUser, ...prev])
+      setResetForm(prev => ({ ...prev, userId: newUser.id, temporaryPassword: '' }))
+      setCreateForm({ email: '', trigramme: '', temporaryPassword: '' })
+      setError(null)
+      showToast(`Compte ${newUser.trigramme} créé.`)
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || "Impossible de créer l'utilisateur.")
+    } finally {
+      setIsCreating(false)
+    }
+  }
+
+  const handleResetPassword = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+
+    if (!resetForm.userId) {
+      setError('Sélectionnez un utilisateur pour réinitialiser son mot de passe.')
+      return
+    }
+
+    if (resetForm.temporaryPassword.length < 8) {
+      setError('Le mot de passe temporaire doit contenir au moins 8 caractères.')
+      return
+    }
+
+    setIsResetting(true)
+    try {
+      const updatedUser = await adminService.resetUserPassword(resetForm.userId, {
+        temporary_password: resetForm.temporaryPassword,
+      })
+      setUsers(prev => prev.map(user => (user.id === updatedUser.id ? updatedUser : user)))
+      setError(null)
+      showToast(`Mot de passe réinitialisé pour ${updatedUser.trigramme}.`)
+      setResetForm(prev => ({ ...prev, temporaryPassword: '' }))
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || 'Impossible de réinitialiser le mot de passe.')
+    } finally {
+      setIsResetting(false)
+    }
+  }
+
   const renderContent = () => {
     if (isLoading) {
       return (
@@ -125,7 +202,8 @@ const UserManagementTab = ({ isActive }: UserManagementTabProps) => {
               <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Trigramme</th>
               <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Email</th>
               <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Créé le</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Statut</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Accès</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Mot de passe</th>
               <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Actions</th>
             </tr>
           </thead>
@@ -134,6 +212,9 @@ const UserManagementTab = ({ isActive }: UserManagementTabProps) => {
               const statusClasses = user.is_active
                 ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300'
                 : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+              const passwordClasses = user.must_change_password
+                ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-200'
+                : 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-200'
 
               return (
                 <tr key={user.id} className="bg-white dark:bg-gray-900/60">
@@ -145,21 +226,52 @@ const UserManagementTab = ({ isActive }: UserManagementTabProps) => {
                       {user.is_active ? 'Actif' : 'Désactivé'}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right">
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => handleDelete(user)}
-                      disabled={deletingUserId === user.id}
-                      className="inline-flex items-center gap-2"
-                    >
-                      {deletingUserId === user.id ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Trash2 className="w-4 h-4" />
-                      )}
-                      <span>Supprimer</span>
-                    </Button>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-col gap-1">
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${passwordClasses}`}>
+                        {user.must_change_password ? 'À renouveler' : 'À jour'}
+                      </span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        {user.must_change_password
+                          ? 'Mot de passe temporaire en attente'
+                          : user.password_changed_at
+                            ? `Mis à jour le ${formatDate(user.password_changed_at)}`
+                            : 'Dernière mise à jour inconnue'}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setResetForm(prev => ({
+                            ...prev,
+                            userId: user.id,
+                            temporaryPassword: generateTemporaryPassword(),
+                          }))
+                        }
+                        className="inline-flex items-center gap-2"
+                      >
+                        <KeyRound className="w-4 h-4" />
+                        <span>Réinitialiser</span>
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => handleDelete(user)}
+                        disabled={deletingUserId === user.id}
+                        className="inline-flex items-center gap-2"
+                      >
+                        {deletingUserId === user.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                        <span>Supprimer</span>
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               )
@@ -176,7 +288,7 @@ const UserManagementTab = ({ isActive }: UserManagementTabProps) => {
         <div>
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Gestion des utilisateurs</h3>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Supprimez les comptes inutilisés ou obsolètes depuis cet espace de gestion.
+            Créez de nouveaux accès, réinitialisez les mots de passe temporaires et supprimez les comptes obsolètes.
           </p>
         </div>
         <Button variant="outline" onClick={() => void fetchUsers()} disabled={isLoading} className="inline-flex items-center gap-2">
@@ -190,6 +302,120 @@ const UserManagementTab = ({ isActive }: UserManagementTabProps) => {
           {error}
         </div>
       )}
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <form onSubmit={handleCreateUser} className="space-y-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="text-base font-semibold text-gray-900 dark:text-white">Créer un compte</h4>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Attribuez un trigramme et un mot de passe temporaire.</p>
+            </div>
+            <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 flex items-center justify-center">
+              <UserPlus className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label htmlFor="create-email">Email</Label>
+              <Input
+                id="create-email"
+                type="email"
+                value={createForm.email}
+                onChange={(e) => setCreateForm(prev => ({ ...prev, email: e.target.value }))}
+                placeholder="prenom.nom@email.com"
+                required
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="create-trigramme">Trigramme</Label>
+              <Input
+                id="create-trigramme"
+                type="text"
+                value={createForm.trigramme}
+                onChange={(e) => setCreateForm(prev => ({ ...prev, trigramme: e.target.value.toUpperCase() }))}
+                placeholder="ABC"
+                maxLength={3}
+                required
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="create-password">Mot de passe temporaire</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="create-password"
+                  type="text"
+                  value={createForm.temporaryPassword}
+                  onChange={(e) => setCreateForm(prev => ({ ...prev, temporaryPassword: e.target.value }))}
+                  placeholder="Générez ou saisissez un mot de passe"
+                  required
+                />
+                <Button type="button" variant="outline" onClick={() => setCreateForm(prev => ({ ...prev, temporaryPassword: generateTemporaryPassword() }))}>
+                  Générer
+                </Button>
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Au moins 8 caractères. L'utilisateur devra le changer dès sa première connexion.</p>
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button type="submit" disabled={isCreating} className="inline-flex items-center gap-2">
+              {isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              Créer le compte
+            </Button>
+          </div>
+        </form>
+
+        <form onSubmit={handleResetPassword} className="space-y-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="text-base font-semibold text-gray-900 dark:text-white">Réinitialiser un mot de passe</h4>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Générez un mot de passe temporaire pour un utilisateur existant.</p>
+            </div>
+            <div className="h-10 w-10 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-200 flex items-center justify-center">
+              <KeyRound className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label htmlFor="reset-user">Utilisateur</Label>
+              <select
+                id="reset-user"
+                value={resetForm.userId}
+                onChange={(e) => setResetForm(prev => ({ ...prev, userId: e.target.value }))}
+                className="w-full h-10 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {users.map(user => (
+                  <option key={user.id} value={user.id}>
+                    {user.trigramme} — {user.email}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="reset-password">Mot de passe temporaire</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="reset-password"
+                  type="text"
+                  value={resetForm.temporaryPassword}
+                  onChange={(e) => setResetForm(prev => ({ ...prev, temporaryPassword: e.target.value }))}
+                  placeholder="Nouveau mot de passe temporaire"
+                  required
+                />
+                <Button type="button" variant="outline" onClick={() => setResetForm(prev => ({ ...prev, temporaryPassword: generateTemporaryPassword() }))}>
+                  Générer
+                </Button>
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Communiquez ce mot de passe à l'utilisateur ; il devra le changer à la connexion.</p>
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button type="submit" disabled={isResetting || !resetForm.userId || users.length === 0} className="inline-flex items-center gap-2">
+              {isResetting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              Réinitialiser
+            </Button>
+          </div>
+        </form>
+      </div>
 
       {renderContent()}
     </div>

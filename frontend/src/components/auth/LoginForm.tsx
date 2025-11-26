@@ -28,10 +28,14 @@ export const LoginForm: React.FC = () => {
     clearAllAuth();
 
     try {
-      await login(identifier, password);
-      navigate('/');
+      const loggedUser = await login(identifier, password);
+      if (loggedUser.mustChangePassword) {
+        navigate('/password-reset');
+      } else {
+        navigate('/');
+      }
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Erreur de connexion');
+      setError(err?.message || err?.response?.data?.detail || 'Erreur de connexion');
     } finally {
       setIsLoading(false);
     }
@@ -95,17 +99,7 @@ export const LoginForm: React.FC = () => {
             </Button>
 
             <div className="text-center text-sm text-muted-foreground">
-              Pas encore de compte ?{' '}
-              <Button
-                variant="link"
-                className="p-0 h-auto font-normal"
-                onClick={(e) => {
-                  e.preventDefault();
-                  navigate('/register');
-                }}
-              >
-                Créer un compte
-              </Button>
+              L'accès est réservé aux comptes provisionnés par un administrateur.
             </div>
           </form>
         </CardContent>

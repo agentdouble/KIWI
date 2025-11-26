@@ -6,7 +6,9 @@ FoyerGPT est une plateforme moderne de chat IA qui permet aux utilisateurs de cr
 
 ### Gestion des utilisateurs
 - Système d'authentification sécurisé avec JWT
-- Inscription avec email et trigramme unique (identifiant à 3 lettres)
+- Comptes provisionnés par les administrateurs (pas d'auto-inscription)
+- Mots de passe temporaires avec changement obligatoire à la première connexion ou après une réinitialisation
+- Réinitialisation et suppression des comptes depuis le tableau de bord admin
 - Gestion des sessions avec expiration automatique
 - Avatar utilisateur personnalisable
 
@@ -120,6 +122,11 @@ npm run dev
 
 # 5. Ouvrir http://localhost:8091
 ```
+
+### Gestion des comptes utilisateurs
+- La création et la suppression des comptes se font depuis l'onglet **Utilisateurs** du tableau de bord administrateur.
+- Les administrateurs définissent un mot de passe temporaire ; l'utilisateur est automatiquement redirigé vers l'écran de changement de mot de passe lors de sa première connexion.
+- Tant que le mot de passe n'est pas changé, l'accès aux autres API est bloqué (seules `/api/auth/me` et `/api/auth/change-password` restent accessibles).
 
 ### Lancement simplifié avec `start.sh`
 
