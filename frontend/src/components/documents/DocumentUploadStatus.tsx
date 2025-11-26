@@ -13,7 +13,7 @@ const stageFallbackLabels: Record<string, string> = {
   queued: 'En attente',
   preparing: 'Préparation',
   text_extraction: 'Extraction du texte',
-  vision_analysis: 'Analyse visuelle (Pixtral)',
+  vision_analysis: 'Analyse visuelle (VLM)',
   embedding: 'Indexation',
   completed: 'Terminé',
   failed: 'Erreur',
