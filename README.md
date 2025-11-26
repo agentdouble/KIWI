@@ -87,6 +87,7 @@ Pour une installation rapide, consultez le [Guide de Démarrage Rapide](./QUICK_
 
 ### Prérequis
 - Python 3.13+
+- bcrypt >= 4.2 (installé automatiquement via `uv sync`)
 - Node.js 18+
 - PostgreSQL 14+
 - Redis (optionnel, pour le cache)
