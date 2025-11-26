@@ -128,6 +128,26 @@ npm run dev
 - Les administrateurs définissent un mot de passe temporaire ; l'utilisateur est automatiquement redirigé vers l'écran de changement de mot de passe lors de sa première connexion.
 - Tant que le mot de passe n'est pas changé, l'accès aux autres API est bloqué (seules `/api/auth/me` et `/api/auth/change-password` restent accessibles).
 
+### Initialiser un compte admin
+
+1. Renseignez les variables suivantes dans `backend/.env` et ajoutez le trigramme choisi à `ADMIN_TRIGRAMMES` :
+
+   ```env
+   DEFAULT_ADMIN_EMAIL=admin@example.com
+   DEFAULT_ADMIN_TRIGRAMME=ADM
+   DEFAULT_ADMIN_PASSWORD=change-me
+   ADMIN_TRIGRAMMES=ADM
+   ```
+
+2. Créez ou mettez à jour le compte admin dans la base :
+
+   ```bash
+   cd backend
+   uv run python init_admin_user.py
+   ```
+
+Le script active le compte, rafraîchit le mot de passe et échoue explicitement si le trigramme n'est pas autorisé.
+
 ### Lancement simplifié avec `start.sh`
 
 Pour démarrer plus rapidement, vous pouvez utiliser le script de démarrage à la racine :
