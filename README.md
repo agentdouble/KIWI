@@ -125,6 +125,7 @@ npm run dev
 
 ### Gestion des comptes utilisateurs
 - La création et la suppression des comptes se font depuis l'onglet **Utilisateurs** du tableau de bord administrateur.
+- Un compte admin par défaut peut être provisionné via `DEFAULT_ADMIN_EMAIL`, `DEFAULT_ADMIN_TRIGRAMME` et `DEFAULT_ADMIN_PASSWORD` dans `backend/.env` ; il est créé/actualisé automatiquement au démarrage et ajouté à la liste des administrateurs.
 - Les administrateurs définissent un mot de passe temporaire ; l'utilisateur est automatiquement redirigé vers l'écran de changement de mot de passe lors de sa première connexion.
 - Tant que le mot de passe n'est pas changé, l'accès aux autres API est bloqué (seules `/api/auth/me` et `/api/auth/change-password` restent accessibles).
 
@@ -170,6 +171,11 @@ DB_PORT=5432
 # Sécurité
 SECRET_KEY=your-secret-key
 JWT_SECRET_KEY=your-jwt-secret
+DEFAULT_ADMIN_EMAIL=admin@example.com
+DEFAULT_ADMIN_TRIGRAMME=ADM
+DEFAULT_ADMIN_PASSWORD=change-me
+# Le trigramme admin par défaut est ajouté automatiquement à la liste
+ADMIN_TRIGRAMMES=ADM
 
 # Mode LLM (api ou local)
 LLM_MODE=api
