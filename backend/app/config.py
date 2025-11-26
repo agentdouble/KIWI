@@ -21,9 +21,6 @@ class Settings(BaseSettings):
     
     # Security
     jwt_secret_key: str = Field(default=None)
-    default_admin_email: Optional[str] = Field(default=None, alias="DEFAULT_ADMIN_EMAIL")
-    default_admin_trigramme: Optional[str] = Field(default=None, alias="DEFAULT_ADMIN_TRIGRAMME")
-    default_admin_password: Optional[str] = Field(default=None, alias="DEFAULT_ADMIN_PASSWORD")
     
     # Mistral API (pour mode API)
     mistral_api_key: str = Field(default=None)
@@ -254,22 +251,9 @@ class Settings(BaseSettings):
         return [item.strip().upper() for item in text_value.split(',') if item.strip()]
 
     @property
-    def default_admin_trigramme_normalized(self) -> Optional[str]:
-        trigramme = (self.default_admin_trigramme or "").strip().upper()
-        if not trigramme:
-            return None
-        if len(trigramme) != 3 or not trigramme.isalpha():
-            logger.error("DEFAULT_ADMIN_TRIGRAMME doit contenir exactement 3 lettres (A-Z)")
-            return None
-        return trigramme
-
-    @property
     def admin_trigrammes(self) -> List[str]:
         if not hasattr(self, "_admin_trigrammes_cache"):
             self._admin_trigrammes_cache = self._normalize_admin_trigrammes(self.admin_trigrammes_raw)
-            default_trigramme = self.default_admin_trigramme_normalized
-            if default_trigramme and default_trigramme not in self._admin_trigrammes_cache:
-                self._admin_trigrammes_cache.append(default_trigramme)
         return self._admin_trigrammes_cache
 
 settings = Settings()

@@ -98,13 +98,11 @@ async def startup_event():
 
     # Garantir la présence des agents officiels
     try:
-        from app.initial_data.default_admin import ensure_default_admin_user
         from app.initial_data.official_agents import ensure_official_agents
         async with AsyncSessionLocal() as session:
-            await ensure_default_admin_user(session)
             await ensure_official_agents(session)
     except Exception as exc:
-        logger.error("Failed to bootstrap initial data: %s", exc, exc_info=True)
+        logger.error("Failed to ensure official agents: %s", exc, exc_info=True)
 
 @app.on_event("shutdown")
 async def shutdown_event():
