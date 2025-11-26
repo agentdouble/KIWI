@@ -146,7 +146,7 @@ npm run dev
    uv run python init_admin_user.py
    ```
 
-Le script active le compte, rafraîchit le mot de passe et échoue explicitement si le trigramme n'est pas autorisé.
+Le script active le compte, rafraîchit le mot de passe et échoue explicitement si le trigramme n'est pas autorisé. Le script `./start.sh` l'exécute automatiquement si les variables `DEFAULT_ADMIN_*` sont renseignées.
 
 ### Lancement simplifié avec `start.sh`
 

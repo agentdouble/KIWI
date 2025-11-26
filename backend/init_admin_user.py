@@ -54,21 +54,10 @@ async def _upsert_admin_user(email: str, trigramme: str, password: str) -> None:
 
         if user:
             if user.trigramme != trigramme:
-                trigramme_conflict = await db.execute(
-                    select(User).filter(User.trigramme == trigramme, User.id != user.id)
+                raise ValueError(
+                    f"Existing user {email} has trigramme {user.trigramme}, expected {trigramme}"
                 )
-                if trigramme_conflict.scalar_one_or_none():
-                    raise ValueError(f"Trigramme {trigramme} is already used by another user")
-                user.trigramme = trigramme
-
-            user.is_active = True
-            user.must_change_password = False
-            user.set_password(password)
-            await db.commit()
-            await db.refresh(user)
-
-            print(f"✅ Admin user updated: {user.email} ({user.trigramme})")
-            print("ℹ️  Password refreshed from DEFAULT_ADMIN_PASSWORD (value not logged)")
+            print(f"✅ Admin user already exists: {user.email} ({user.trigramme}) — nothing to do")
             return
 
         trigramme_conflict = await db.execute(select(User).filter(User.trigramme == trigramme))
