@@ -59,6 +59,12 @@ class Settings(BaseSettings):
         default="pixtral-large-latest",
         validation_alias=AliasChoices("VISION_VLLM_MODEL", "PIXTRAL_VLLM_MODEL"),
     )
+
+    # SSL pour les appels LLM (vLLM, Pixtral, etc.)
+    llm_verify_ssl: bool = Field(
+        default=True,
+        description="Vérifie les certificats SSL pour les appels HTTP vers les LLM (définissable via LLM_VERIFY_SSL).",
+    )
     
     # App
     app_name: str = "FoyerGPT Backend"
