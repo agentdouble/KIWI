@@ -128,3 +128,44 @@ async def ensure_document_processing_schema() -> None:
             )
     except Exception:  # pragma: no cover - defensive logging
         logger.exception("Failed to ensure document processing schema")
+
+
+async def ensure_user_security_schema() -> None:
+    """Ensure user table has required security columns."""
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text(
+                    """
+                    ALTER TABLE IF EXISTS users
+                    ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT FALSE;
+                    """
+                )
+            )
+            await conn.execute(
+                text(
+                    """
+                    UPDATE users
+                    SET must_change_password = FALSE
+                    WHERE must_change_password IS NULL;
+                    """
+                )
+            )
+            await conn.execute(
+                text(
+                    """
+                    ALTER TABLE IF EXISTS users
+                    ALTER COLUMN must_change_password SET NOT NULL;
+                    """
+                )
+            )
+            await conn.execute(
+                text(
+                    """
+                    ALTER TABLE IF EXISTS users
+                    ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMPTZ;
+                    """
+                )
+            )
+    except Exception:  # pragma: no cover - defensive logging
+        logger.exception("Failed to ensure user security schema")

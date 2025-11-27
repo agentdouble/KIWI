@@ -1,13 +1,12 @@
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.schemas.auth import TokenData
 from app.config import settings
-import os
 from uuid import UUID
 from sqlalchemy import select
 from passlib.context import CryptContext
@@ -88,9 +87,24 @@ async def get_current_user(
     return user
 
 
-async def get_current_active_user(current_user = Depends(get_current_user)):
+async def get_current_active_user(
+    request: Request,
+    current_user = Depends(get_current_user)
+):
     if not current_user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
+
+    if getattr(current_user, "must_change_password", False):
+        allowed_paths = {
+            "/api/auth/me",
+            "/api/auth/change-password",
+            "/api/auth/logout",
+        }
+        if request.url.path not in allowed_paths:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Password change required",
+            )
     return current_user
 
 
