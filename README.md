@@ -111,7 +111,7 @@ createdb oskour
 cd backend
 pip install uv
 uv sync
-uv run alembic upgrade head
+uv run alembic upgrade head  # lancer depuis backend/ pour utiliser backend/alembic.ini
 uv run python run.py
 # (Option développement) pour activer le rechargement automatique sans surveiller le dossier de stockage :
 # BACKEND_RELOAD=1 uv run python run.py
