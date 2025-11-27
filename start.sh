@@ -92,24 +92,6 @@ if port:
 PY
 }
 
-bootstrap_admin_user() {
-    local email trigram password
-    email=$(get_env_value "DEFAULT_ADMIN_EMAIL" "$BACKEND_ENV_FILE")
-    trigram=$(get_env_value "DEFAULT_ADMIN_TRIGRAMME" "$BACKEND_ENV_FILE")
-    password=$(get_env_value "DEFAULT_ADMIN_PASSWORD" "$BACKEND_ENV_FILE")
-
-    if [ -z "$email" ] || [ -z "$trigram" ] || [ -z "$password" ]; then
-        echo "ℹ️  Initialisation admin ignorée : DEFAULT_ADMIN_* non définies dans backend/.env"
-        return
-    fi
-
-    echo "👑 Initialisation du compte admin ($email / $trigram)…"
-    if ! (cd "$SCRIPT_DIR/backend" && uv run python init_admin_user.py); then
-        echo "❌ Échec de l'initialisation du compte admin"
-        exit 1
-    fi
-}
-
 free_port() {
     local port="$1"
     [ -z "$port" ] && return
@@ -226,9 +208,6 @@ else
     echo "❌ Node.js introuvable. Installez Node.js >= $MIN_NODE_VERSION avant de démarrer le frontend."
     exit 1
 fi
-
-# Créer l'admin par défaut si les variables sont renseignées
-bootstrap_admin_user
 
 # Fonction pour tuer les processus à la fin
 cleanup() {

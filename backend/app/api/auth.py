@@ -3,15 +3,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database import get_db
 from app.models.user import User
-from app.schemas.auth import (
-    UserCreate,
-    UserLogin,
-    UserResponse,
-    Token,
-    PasswordChangeRequest,
+from app.schemas.auth import UserCreate, UserLogin, UserResponse, Token
+from app.utils.auth import (
+    verify_password, 
+    get_password_hash, 
+    create_access_token,
+    get_current_active_user
 )
-from app.utils.auth import create_access_token, get_current_active_user, get_current_admin_user
 from app.utils.rate_limit import limiter, AUTH_RATE_LIMIT
+from datetime import timedelta
 import logging
 
 router = APIRouter(tags=["authentication"])
@@ -20,12 +20,7 @@ logger = logging.getLogger(__name__)
 
 @router.post("/register", response_model=UserResponse)
 @limiter.limit(AUTH_RATE_LIMIT)
-async def register(
-    request: Request,
-    user_data: UserCreate,
-    db: AsyncSession = Depends(get_db),
-    current_admin: User = Depends(get_current_admin_user),
-):
+async def register(request: Request, user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).filter(User.email == user_data.email))
     existing_user = result.scalar_one_or_none()
     if existing_user:
@@ -39,12 +34,6 @@ async def register(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Le trigramme doit contenir exactement 3 lettres"
         )
-
-    if len(user_data.password) < 8:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Le mot de passe doit contenir au moins 8 caractères",
-        )
     
     result = await db.execute(select(User).filter(User.trigramme == user_data.trigramme.upper()))
     if result.scalar_one_or_none():
@@ -55,13 +44,12 @@ async def register(
     
     user = User(email=user_data.email, trigramme=user_data.trigramme.upper())
     user.set_password(user_data.password)
-    user.must_change_password = True
     
     db.add(user)
     await db.commit()
     await db.refresh(user)
     
-    logger.info("Admin %s created user %s", current_admin.trigramme, user.email)
+    logger.info(f"New user registered: {user.email}")
     return user
 
 
@@ -83,14 +71,12 @@ async def login(request: Request, user_data: UserLogin, db: AsyncSession = Depen
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    access_token = create_access_token(data={"sub": str(user.id), "email": user.email})
+    access_token = create_access_token(
+        data={"sub": str(user.id), "email": user.email}
+    )
     
     logger.info(f"User logged in: {user.email}")
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "must_change_password": bool(user.must_change_password),
-    }
+    return {"access_token": access_token, "token_type": "bearer"}
 
 
 @router.get("/me", response_model=UserResponse)
@@ -102,37 +88,3 @@ async def get_current_user_info(current_user: User = Depends(get_current_active_
 async def logout(current_user: User = Depends(get_current_active_user)):
     logger.info(f"User logged out: {current_user.email}")
     return {"message": "Successfully logged out"}
-
-
-@router.post("/change-password", response_model=UserResponse)
-async def change_password(
-    payload: PasswordChangeRequest,
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
-):
-    if not current_user.check_password(payload.current_password):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Mot de passe actuel incorrect",
-        )
-
-    if len(payload.new_password) < 8:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Le nouveau mot de passe doit contenir au moins 8 caractères",
-        )
-
-    if current_user.check_password(payload.new_password):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Le nouveau mot de passe doit être différent de l'ancien",
-        )
-
-    current_user.set_password(payload.new_password)
-    current_user.must_change_password = False
-
-    await db.commit()
-    await db.refresh(current_user)
-
-    logger.info("User %s changed password", current_user.trigramme)
-    return current_user

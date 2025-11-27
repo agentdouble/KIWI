@@ -8,30 +8,44 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ArtificialHero } from './ArtificialHero';
-import { clearAllAuth } from '@/utils/clearAuth';
 
-export const LoginForm: React.FC = () => {
-  const [identifier, setIdentifier] = useState('');
+export const RegisterForm: React.FC = () => {
+  const [email, setEmail] = useState('');
+  const [trigramme, setTrigramme] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   
   const navigate = useNavigate();
-  const login = useAuthStore((state) => state.login);
+  const register = useAuthStore((state) => state.register);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    if (password !== confirmPassword) {
+      setError('Les mots de passe ne correspondent pas');
+      return;
+    }
+
+    if (password.length < 6) {
+      setError('Le mot de passe doit contenir au moins 6 caractères');
+      return;
+    }
+
+    if (trigramme.length !== 3 || !/^[A-Za-z]+$/.test(trigramme)) {
+      setError('Le trigramme doit contenir exactement 3 lettres');
+      return;
+    }
+
     setIsLoading(true);
 
-    // Nettoyer tous les anciens tokens avant le login
-    clearAllAuth();
-
     try {
-      await login(identifier, password);
+      await register(email, trigramme, password);
       navigate('/');
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Erreur de connexion');
+      setError(err.response?.data?.detail || 'Erreur lors de la création du compte');
     } finally {
       setIsLoading(false);
     }
@@ -43,9 +57,9 @@ export const LoginForm: React.FC = () => {
       <div className="w-full lg:w-1/2 flex items-center justify-center p-8 relative z-10">
         <Card className="w-full max-w-md bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-normal text-center">Connexion</CardTitle>
+          <CardTitle className="text-2xl font-normal text-center">Créer un compte</CardTitle>
           <CardDescription className="text-center text-muted-foreground">
-            Connectez-vous à votre compte FoyerGPT
+            Rejoignez FoyerGPT pour créer vos propres agents IA
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -58,16 +72,33 @@ export const LoginForm: React.FC = () => {
             )}
             
             <div className="space-y-2">
-              <Label htmlFor="identifier">Email ou Trigramme</Label>
+              <Label htmlFor="email">Email</Label>
               <Input
-                type="text"
-                id="identifier"
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
+                type="email"
+                id="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 required
-                placeholder="votre@email.com ou ABC"
+                placeholder="votre@email.com"
                 className="h-10"
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="trigramme">Trigramme</Label>
+              <Input
+                type="text"
+                id="trigramme"
+                value={trigramme}
+                onChange={(e) => setTrigramme(e.target.value.toUpperCase())}
+                required
+                placeholder="ABC"
+                maxLength={3}
+                className="h-10"
+              />
+              <p className="text-xs text-muted-foreground">
+                3 lettres uniques pour vous identifier (ex: GJV)
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -78,7 +109,20 @@ export const LoginForm: React.FC = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                placeholder="Votre mot de passe"
+                placeholder="Au moins 6 caractères"
+                className="h-10"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirmer le mot de passe</Label>
+              <Input
+                type="password"
+                id="confirmPassword"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                placeholder="Répétez le mot de passe"
                 className="h-10"
               />
             </div>
@@ -87,24 +131,24 @@ export const LoginForm: React.FC = () => {
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Connexion...
+                  Création...
                 </>
               ) : (
-                'Se connecter'
+                'Créer mon compte'
               )}
             </Button>
 
             <div className="text-center text-sm text-muted-foreground">
-              Pas encore de compte ?{' '}
+              Déjà un compte ?{' '}
               <Button
                 variant="link"
                 className="p-0 h-auto font-normal"
                 onClick={(e) => {
                   e.preventDefault();
-                  navigate('/register');
+                  navigate('/login');
                 }}
               >
-                Créer un compte
+                Se connecter
               </Button>
             </div>
           </form>

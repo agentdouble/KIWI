@@ -12,10 +12,10 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { SocketProvider } from '@/contexts/SocketContext'
 import { BackendInitializer } from '@/components/BackendInitializer'
 import { LoginForm } from '@/components/auth/LoginForm'
+import { RegisterForm } from '@/components/auth/RegisterForm'
 import { RequireAuth } from '@/components/auth/RequireAuth'
 import { RequireAdmin } from '@/components/auth/RequireAdmin'
 import { ToastProvider } from '@/providers/ToastProvider'
-import { PasswordReset } from '@/pages/PasswordReset'
 
 function App() {
   return (
@@ -28,10 +28,10 @@ function App() {
               <Routes>
                 {/* Routes publiques */}
                 <Route path="/login" element={<LoginForm />} />
+                <Route path="/register" element={<RegisterForm />} />
                 
                 {/* Routes protégées - nécessitent authentification */}
                 <Route element={<RequireAuth />}>
-                  <Route path="/password-reset" element={<PasswordReset />} />
                   <Route element={<MainLayout />}>
                     <Route path="/" element={<Chat />} />
                     <Route path="/chat/:chatId" element={<Chat />} />

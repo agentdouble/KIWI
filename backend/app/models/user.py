@@ -1,11 +1,10 @@
-from sqlalchemy import Column, String, DateTime, Boolean, text
+from sqlalchemy import Column, String, DateTime, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.models.base import Base
 import uuid
 from passlib.context import CryptContext
-from datetime import datetime, timezone
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -18,8 +17,6 @@ class User(Base):
     trigramme = Column(String(3), unique=True, nullable=False, index=True)
     password_hash = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=True)
-    must_change_password = Column(Boolean, nullable=False, default=False, server_default=text("false"))
-    password_changed_at = Column(DateTime(timezone=True), nullable=True)
     
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -33,7 +30,6 @@ class User(Base):
     
     def set_password(self, password: str) -> None:
         self.password_hash = pwd_context.hash(password)
-        self.password_changed_at = datetime.now(timezone.utc)
     
     def check_password(self, password: str) -> bool:
         return pwd_context.verify(password, self.password_hash)
@@ -47,8 +43,6 @@ class User(Base):
             "email": self.email,
             "trigramme": self.trigramme,
             "is_active": self.is_active,
-            "must_change_password": self.must_change_password,
-            "password_changed_at": self.password_changed_at.isoformat() if self.password_changed_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
