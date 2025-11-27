@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List
 from uuid import UUID
 
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import func, select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,10 +19,43 @@ from app.schemas.admin import (
     DashboardStatsResponse,
     AdminManagedUser,
     UserMessagesToday,
+    AdminCreateUserRequest,
+    AdminResetPasswordRequest,
 )
 from app.utils.auth import get_current_admin_user
 
 router = APIRouter(tags=["admin"])
+logger = logging.getLogger(__name__)
+
+
+def _serialize_admin_user(user: User) -> AdminManagedUser:
+    return AdminManagedUser(
+        id=user.id,
+        email=user.email,
+        trigramme=user.trigramme,
+        is_active=bool(user.is_active),
+        must_change_password=bool(user.must_change_password),
+        password_changed_at=user.password_changed_at,
+        created_at=user.created_at,
+    )
+
+
+def _validate_trigramme(value: str) -> str:
+    normalized = value.strip().upper()
+    if len(normalized) != 3 or not normalized.isalpha():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Le trigramme doit contenir exactement 3 lettres.",
+        )
+    return normalized
+
+
+def _validate_password_strength(password: str) -> None:
+    if len(password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Le mot de passe temporaire doit contenir au moins 8 caractères.",
+        )
 
 
 @router.get("/dashboard", response_model=DashboardStatsResponse)
@@ -148,16 +182,47 @@ async def list_users(
     result = await db.execute(stmt)
     users = result.scalars().all()
 
-    return [
-        AdminManagedUser(
-            id=user.id,
-            email=user.email,
-            trigramme=user.trigramme,
-            is_active=bool(user.is_active),
-            created_at=user.created_at,
+    return [_serialize_admin_user(user) for user in users]
+
+
+@router.post("/users", response_model=AdminManagedUser, status_code=status.HTTP_201_CREATED)
+async def create_user(
+    payload: AdminCreateUserRequest,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    """Crée un nouvel utilisateur (réservé aux administrateurs)."""
+    trigramme = _validate_trigramme(payload.trigramme)
+    _validate_password_strength(payload.temporary_password)
+
+    existing_email = await db.execute(select(User).filter(User.email == payload.email))
+    if existing_email.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Un utilisateur existe déjà avec cet email.",
         )
-        for user in users
-    ]
+
+    existing_trigramme = await db.execute(select(User).filter(User.trigramme == trigramme))
+    if existing_trigramme.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Ce trigramme est déjà utilisé.",
+        )
+
+    user = User(
+        email=payload.email,
+        trigramme=trigramme,
+        is_active=True,
+        must_change_password=True,
+    )
+    user.set_password(payload.temporary_password)
+
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+
+    logger.info("Admin %s created user %s", current_admin.trigramme, user.trigramme)
+    return _serialize_admin_user(user)
 
 
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -178,7 +243,32 @@ async def delete_user(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utilisateur introuvable.")
 
+    logger.info("Admin %s deleted user %s", current_admin.trigramme, user.trigramme)
     await db.delete(user)
     await db.commit()
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/users/{user_id}/reset-password", response_model=AdminManagedUser)
+async def reset_user_password(
+    user_id: UUID,
+    payload: AdminResetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    """Réinitialise le mot de passe d'un utilisateur et force le changement à la prochaine connexion."""
+    _validate_password_strength(payload.temporary_password)
+
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utilisateur introuvable.")
+
+    user.set_password(payload.temporary_password)
+    user.must_change_password = True
+
+    await db.commit()
+    await db.refresh(user)
+
+    logger.info("Admin %s reset password for user %s", current_admin.trigramme, user.trigramme)
+    return _serialize_admin_user(user)

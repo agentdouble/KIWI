@@ -1,13 +1,22 @@
 import { useEffect } from 'react';
-import { Outlet, Navigate } from 'react-router-dom';
+import { Outlet, Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 
 export const RequireAuth = () => {
-  const { isAuthenticated, token, checkAuth } = useAuthStore();
+  const { isAuthenticated, token, checkAuth, user } = useAuthStore();
+  const location = useLocation();
+
+  useEffect(() => {
+    const handlePasswordResetRequired = () => {
+      void checkAuth();
+    };
+    window.addEventListener('auth:password-reset-required', handlePasswordResetRequired);
+    return () => window.removeEventListener('auth:password-reset-required', handlePasswordResetRequired);
+  }, [checkAuth]);
 
   useEffect(() => {
     if (token) {
-      checkAuth();
+      void checkAuth();
     }
   }, [token, checkAuth]);
 
@@ -26,6 +35,15 @@ export const RequireAuth = () => {
         </div>
       </div>
     );
+  }
+
+  const mustChangePassword = Boolean(user?.mustChangePassword);
+  if (isAuthenticated && mustChangePassword && location.pathname !== '/password-reset') {
+    return <Navigate to="/password-reset" replace />;
+  }
+
+  if (isAuthenticated && !mustChangePassword && location.pathname === '/password-reset') {
+    return <Navigate to="/" replace />;
   }
 
   return <Outlet />;

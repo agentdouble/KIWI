@@ -6,7 +6,9 @@ FoyerGPT est une plateforme moderne de chat IA qui permet aux utilisateurs de cr
 
 ### Gestion des utilisateurs
 - Système d'authentification sécurisé avec JWT
-- Inscription avec email et trigramme unique (identifiant à 3 lettres)
+- Comptes provisionnés par les administrateurs (pas d'auto-inscription)
+- Mots de passe temporaires avec changement obligatoire à la première connexion ou après une réinitialisation
+- Réinitialisation et suppression des comptes depuis le tableau de bord admin
 - Gestion des sessions avec expiration automatique
 - Avatar utilisateur personnalisable
 
@@ -85,6 +87,7 @@ Pour une installation rapide, consultez le [Guide de Démarrage Rapide](./QUICK_
 
 ### Prérequis
 - Python 3.13+
+- bcrypt >= 4.2 (installé automatiquement via `uv sync`)
 - Node.js 18+
 - PostgreSQL 14+
 - Redis (optionnel, pour le cache)
@@ -120,6 +123,31 @@ npm run dev
 
 # 5. Ouvrir http://localhost:8091
 ```
+
+### Gestion des comptes utilisateurs
+- La création et la suppression des comptes se font depuis l'onglet **Utilisateurs** du tableau de bord administrateur.
+- Les administrateurs définissent un mot de passe temporaire ; l'utilisateur est automatiquement redirigé vers l'écran de changement de mot de passe lors de sa première connexion.
+- Tant que le mot de passe n'est pas changé, l'accès aux autres API est bloqué (seules `/api/auth/me` et `/api/auth/change-password` restent accessibles).
+
+### Initialiser un compte admin
+
+1. Renseignez les variables suivantes dans `backend/.env` et ajoutez le trigramme choisi à `ADMIN_TRIGRAMMES` :
+
+   ```env
+   DEFAULT_ADMIN_EMAIL=admin@example.com
+   DEFAULT_ADMIN_TRIGRAMME=ADM
+   DEFAULT_ADMIN_PASSWORD=change-me
+   ADMIN_TRIGRAMMES=ADM
+   ```
+
+2. Créez ou mettez à jour le compte admin dans la base :
+
+   ```bash
+   cd backend
+   uv run python init_admin_user.py
+   ```
+
+Le script active le compte, rafraîchit le mot de passe et échoue explicitement si le trigramme n'est pas autorisé. Le script `./start.sh` l'exécute automatiquement si les variables `DEFAULT_ADMIN_*` sont renseignées.
 
 ### Lancement simplifié avec `start.sh`
 
