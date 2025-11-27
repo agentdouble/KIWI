@@ -5,7 +5,7 @@ from app.api.router import api_router
 from app.database import engine, Base, AsyncSessionLocal
 from app.utils.rate_limit import limiter, rate_limit_exceeded_handler
 from app.utils.cache import cache_service
-from app.utils.schema import ensure_document_processing_schema, ensure_user_security_schema
+from app.utils.schema import ensure_document_processing_schema
 from slowapi.errors import RateLimitExceeded
 import socketio
 import logging
@@ -91,7 +91,6 @@ async def startup_event():
         await conn.run_sync(Base.metadata.create_all)
 
     await ensure_document_processing_schema()
-    await ensure_user_security_schema()
 
     # Initialiser le service de cache Redis
     await cache_service.connect()
