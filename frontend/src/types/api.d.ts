@@ -19,6 +19,17 @@ export interface ApiError {
   details?: Record<string, any>
 }
 
+export interface AuthTokenResponse {
+  access_token: string
+  token_type: 'bearer'
+  must_change_password: boolean
+}
+
+export interface PasswordChangeRequest {
+  current_password: string
+  new_password: string
+}
+
 // DTOs pour les requêtes
 export interface CreateChatRequest {
   title?: string
@@ -145,7 +156,19 @@ export interface AdminManagedUser {
   email: string
   trigramme: string
   is_active: boolean
+  must_change_password: boolean
+  password_changed_at: string | null
   created_at: string | null
+}
+
+export interface AdminCreateUserRequest {
+  email: string
+  trigramme: string
+  temporary_password: string
+}
+
+export interface AdminResetPasswordRequest {
+  temporary_password: string
 }
 
 // System alert

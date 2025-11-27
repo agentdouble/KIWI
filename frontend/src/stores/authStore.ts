@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { api } from '@/lib/api/config';
 import { localApi, setLocalToken, clearLocalToken } from '@/lib/api/localApi';
 
 interface User {
@@ -8,6 +7,8 @@ interface User {
   email: string;
   trigramme: string;
   isAdmin: boolean;
+  mustChangePassword: boolean;
+  passwordChangedAt?: string | null;
 }
 
 interface AuthState {
@@ -16,8 +17,7 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   
-  login: (identifier: string, password: string) => Promise<void>;
-  register: (email: string, trigramme: string, password: string) => Promise<void>;
+  login: (identifier: string, password: string) => Promise<User>;
   logout: () => void;
   checkAuth: () => Promise<void>;
 }
@@ -77,6 +77,8 @@ export const useAuthStore = create<AuthState>()(
             email: userResponse.data.email,
             trigramme: userResponse.data.trigramme,
             isAdmin: userResponse.data.is_admin ?? false,
+            mustChangePassword: userResponse.data.must_change_password ?? false,
+            passwordChangedAt: userResponse.data.password_changed_at,
           };
 
           set({
@@ -89,6 +91,7 @@ export const useAuthStore = create<AuthState>()(
           // Déclencher un événement pour recharger les chats
           window.dispatchEvent(new Event('auth:login'));
           window.dispatchEvent(new Event('force-reload-chats'));
+          return mappedUser;
         } catch (error: any) {
           set({ isLoading: false });
           // Ne pas exposer les détails de l'erreur backend
@@ -96,30 +99,6 @@ export const useAuthStore = create<AuthState>()(
             error?.response?.status === 401 
               ? 'Identifiants incorrects' 
               : 'Erreur de connexion. Veuillez réessayer.'
-          );
-          throw userFriendlyError;
-        }
-      },
-
-      register: async (email: string, trigramme: string, password: string) => {
-        set({ isLoading: true });
-        try {
-          // Créer le compte
-          await api.post('/api/auth/register', {
-            email,
-            trigramme,
-            password,
-          });
-          
-          // Se connecter automatiquement
-          await useAuthStore.getState().login(email, password);
-        } catch (error: any) {
-          set({ isLoading: false });
-          // Ne pas exposer les détails de l'erreur backend
-          const userFriendlyError = new Error(
-            error?.response?.status === 409
-              ? 'Un compte existe déjà avec cet email'
-              : 'Erreur lors de la création du compte. Veuillez réessayer.'
           );
           throw userFriendlyError;
         }
@@ -162,6 +141,8 @@ export const useAuthStore = create<AuthState>()(
             email: response.data.email,
             trigramme: response.data.trigramme,
             isAdmin: response.data.is_admin ?? false,
+            mustChangePassword: response.data.must_change_password ?? false,
+            passwordChangedAt: response.data.password_changed_at,
           };
           set({
             user: mappedUser,

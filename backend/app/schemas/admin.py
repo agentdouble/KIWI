@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 
 class ChatCountPerHour(BaseModel):
@@ -45,4 +45,16 @@ class AdminManagedUser(BaseModel):
     email: str
     trigramme: str
     is_active: bool
+    must_change_password: bool
+    password_changed_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
+
+
+class AdminCreateUserRequest(BaseModel):
+    email: EmailStr
+    trigramme: str
+    temporary_password: str
+
+
+class AdminResetPasswordRequest(BaseModel):
+    temporary_password: str
