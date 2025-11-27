@@ -22,8 +22,8 @@ export const api = axios.create({
 
 // Intercepteur pour ajouter le JWT token et sessionId à chaque requête
 api.interceptors.request.use((config) => {
-  // Ne PAS ajouter de token pour les routes de login/register
-  const isAuthRoute = config.url?.includes('/auth/login') || config.url?.includes('/auth/register')
+  // Ne PAS ajouter de token pour les routes de login
+  const isAuthRoute = config.url?.includes('/auth/login')
   
   if (!isAuthRoute) {
     // Récupérer le token JWT depuis le store d'authentification
@@ -71,7 +71,11 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const now = Date.now()
-    
+
+    if (error.response?.status === 403 && error.response?.data?.detail === 'Password change required') {
+      window.dispatchEvent(new Event('auth:password-reset-required'))
+    }
+
     if (error.response?.status === 401 && (now - lastRedirectTime) > REDIRECT_COOLDOWN) {
       if (process.env.NODE_ENV === 'development') {
         console.log('[API] 401 error detected, handling logout')

@@ -22,20 +22,21 @@ class VLLMService:
         self.max_tokens = settings.vllm_max_tokens
         self.temperature = settings.vllm_temperature
         self.timeout = settings.vllm_timeout
-        
-        # Configuration Pixtral pour le mode local
-        self.pixtral_url = self._normalize_client_url(
-            settings.pixtral_vllm_url,
-            label="Pixtral vLLM",
+
+        # Configuration vision pour le mode local
+        self.vision_url = self._normalize_client_url(
+            settings.vision_vllm_url,
+            label="Vision vLLM",
         )
-        self.pixtral_model = settings.pixtral_vllm_model
+        self.vision_model = settings.vision_vllm_model
+        
+        logger.info(f"vLLM Service initialized with URL: {self.api_url}")
+        logger.info(f"Vision vLLM available at: {self.vision_url}")
+        logger.info(f"Vision vLLM model configured as: {self.vision_model}")
 
         # Contrôle de la vérification SSL pour les appels HTTP vers les LLM
         self.verify_ssl = settings.llm_verify_ssl
         
-        logger.info(f"vLLM Service initialized with URL: {self.api_url}")
-        logger.info(f"Pixtral vLLM available at: {self.pixtral_url}")
-        logger.info(f"Pixtral vLLM model configured as: {self.pixtral_model}")
         logger.info(
             "LLM SSL verification is %s",
             "ENABLED" if self.verify_ssl else "DISABLED",
@@ -81,10 +82,10 @@ class VLLMService:
             parsed = parsed._replace(netloc=new_netloc)
         return urlunparse(parsed)
 
-    async def _sync_pixtral_model(self, client: httpx.AsyncClient) -> None:
-        """Ensure configured Pixtral model exists on the local vLLM server."""
+    async def _sync_vision_model(self, client: httpx.AsyncClient) -> None:
+        """Vérifie que le modèle de vision configuré est disponible côté vLLM."""
         try:
-            list_url = self.pixtral_url.replace("/chat/completions", "/models")
+            list_url = self.vision_url.replace("/chat/completions", "/models")
             response = await client.get(list_url)
             response.raise_for_status()
 
@@ -93,20 +94,20 @@ class VLLMService:
 
             if not available_models:
                 raise ExternalServiceError(
-                    "Pixtral vLLM",
-                    Exception("Aucun modèle Pixtral disponible sur le serveur local"),
+                    "Vision vLLM",
+                    Exception("Aucun modèle de vision disponible sur le serveur local"),
                 )
 
-            if self.pixtral_model not in available_models:
-                fallback_model = available_models[0]
-                logger.warning(
-                    "Pixtral vLLM model %s introuvable. Utilisation du modèle disponible %s",
-                    self.pixtral_model,
-                    fallback_model,
+            if self.vision_model not in available_models:
+                raise ExternalServiceError(
+                    "Vision vLLM",
+                    Exception(
+                        "Le modèle de vision configuré (%s) est introuvable. Modèles disponibles: %s"
+                        % (self.vision_model, ", ".join(available_models)),
+                    ),
                 )
-                self.pixtral_model = fallback_model
         except Exception as exc:
-            logger.error("Impossible de synchroniser les modèles Pixtral vLLM: %s", exc)
+            logger.error("Impossible de synchroniser les modèles de vision vLLM: %s", exc)
             raise
     
     async def _handle_tool_calls(self, tool_calls: List[Dict], original_messages: List[Dict]) -> str:
@@ -351,22 +352,14 @@ class VLLMService:
             logger.error(f"vLLM streaming API error: {str(e)}")
             raise ExternalServiceError("vLLM", e)
     
-    async def process_image_with_pixtral(self, image_base64: str, prompt: str = "Décris cette image en détail.") -> str:
+    async def process_image_with_vision_model(self, image_base64: str, prompt: str = "Décris cette image en détail.") -> str:
         """
-        Traiter une image avec Pixtral en mode local (vLLM)
-        
-        Args:
-            image_base64: Image encodée en base64
-            prompt: Question ou instruction sur l'image
-            
-        Returns:
-            str: Description ou réponse de Pixtral
+        Traiter une image avec le modèle de vision en mode local (vLLM)
         """
         headers = {"Content-Type": "application/json"}
         
-        # Construire le payload selon le format attendu par Pixtral vLLM
         payload = {
-            "model": self.pixtral_model,
+            "model": self.vision_model,
             "messages": [
                 {
                     "role": "user",
@@ -382,58 +375,64 @@ class VLLMService:
         
         try:
             async with httpx.AsyncClient(timeout=self.timeout, verify=self.verify_ssl) as client:
-                await self._sync_pixtral_model(client)
-                payload["model"] = self.pixtral_model
+                await self._sync_vision_model(client)
+                payload["model"] = self.vision_model
 
                 logger.info(
-                    "Sending image to Pixtral vLLM at %s with model %s",
-                    self.pixtral_url,
-                    self.pixtral_model,
+                    "Sending image to vision vLLM at %s with model %s",
+                    self.vision_url,
+                    self.vision_model,
                 )
 
                 try:
-                    response = await client.post(self.pixtral_url, json=payload, headers=headers)
+                    response = await client.post(self.vision_url, json=payload, headers=headers)
                 except httpx.ConnectError as conn_err:
                     logger.error(
-                        "Pixtral vLLM connection failed at %s: %s",
-                        self.pixtral_url,
+                        "Vision vLLM connection failed at %s: %s",
+                        self.vision_url,
                         conn_err,
                     )
                     raise ExternalServiceError(
-                        "Pixtral vLLM",
+                        "Vision vLLM",
                         Exception(
-                            "Impossible de se connecter au serveur Pixtral local. "
+                            "Impossible de se connecter au serveur de modèle de vision local. "
                             "Assurez-vous qu'il est démarré et accessible."
                         ),
                     )
 
                 if response.status_code == 404 and "does not exist" in response.text:
-                    await self._sync_pixtral_model(client)
-                    payload["model"] = self.pixtral_model
+                    await self._sync_vision_model(client)
+                    payload["model"] = self.vision_model
                     logger.info(
-                        "Retrying Pixtral vLLM request with resolved model %s",
-                        self.pixtral_model,
+                        "Retrying vision vLLM request with resolved model %s",
+                        self.vision_model,
                     )
-                    response = await client.post(self.pixtral_url, json=payload, headers=headers)
+                    response = await client.post(self.vision_url, json=payload, headers=headers)
 
                 if response.status_code == 200:
                     result = response.json()
-                    content = result["choices"][0]["message"]["content"]
-                    logger.info("Successfully processed image with Pixtral vLLM")
+                    content = result["choices"][0]["message"].get("content", "")
+                    if isinstance(content, list):
+                        content = "".join(
+                            part.get("text", "") if isinstance(part, dict) else str(part)
+                            for part in content
+                            if part is not None
+                        )
+                    logger.info("Successfully processed image with vision vLLM")
                     return content
 
                 error_msg = (
-                    f"Pixtral vLLM request failed with status {response.status_code}: {response.text}"
+                    f"Vision vLLM request failed with status {response.status_code}: {response.text}"
                 )
                 logger.error(error_msg)
-                raise ExternalServiceError("Pixtral vLLM", Exception(error_msg))
+                raise ExternalServiceError("Vision vLLM", Exception(error_msg))
 
         except httpx.TimeoutException:
-            logger.error(f"Pixtral vLLM request timed out after {self.timeout}s")
-            raise ExternalServiceError("Pixtral vLLM", Exception("Request timeout"))
+            logger.error(f"Vision vLLM request timed out after {self.timeout}s")
+            raise ExternalServiceError("Vision vLLM", Exception("Request timeout"))
         except Exception as e:
-            logger.error(f"Pixtral vLLM API error: {str(e)}")
-            raise ExternalServiceError("Pixtral vLLM", e)
+            logger.error(f"Vision vLLM API error: {str(e)}")
+            raise ExternalServiceError("Vision vLLM", e)
     
     async def health_check(self) -> bool:
         """Vérifier que le serveur vLLM est accessible"""
@@ -447,13 +446,13 @@ class VLLMService:
             logger.error(f"vLLM health check failed: {str(e)}")
             return False
             
-    async def pixtral_health_check(self) -> bool:
-        """Vérifier que le serveur Pixtral vLLM est accessible"""
+    async def vision_health_check(self) -> bool:
+        """Vérifier que le serveur de modèle de vision vLLM est accessible"""
         try:
-            health_url = self.pixtral_url.replace("/chat/completions", "/models")
+            health_url = self.vision_url.replace("/chat/completions", "/models")
             async with httpx.AsyncClient(timeout=5.0, verify=self.verify_ssl) as client:
                 response = await client.get(health_url)
                 return response.status_code == 200
         except Exception as e:
-            logger.error(f"Pixtral vLLM health check failed: {str(e)}")
+            logger.error(f"Vision vLLM health check failed: {str(e)}")
             return False
