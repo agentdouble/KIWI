@@ -1,4 +1,4 @@
 from app.database import Base
 
-# Importer depuis database.py pour éviter les imports circulaires
+# Importer depuis database.py pour Ã©viter les imports circulaires
 __all__ = ["Base"]

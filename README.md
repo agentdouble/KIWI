@@ -251,6 +251,8 @@ cd frontend
 npm test
 ```
 
+> Les instantanés d’accessibilité générés localement (`.snap_*.json`) sont ignorés et peuvent être supprimés sans risque.
+
 ## Contribution
 
 Les contributions sont les bienvenues ! Veuillez suivre ces étapes :

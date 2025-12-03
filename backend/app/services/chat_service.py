@@ -100,7 +100,7 @@ class ChatService:
             select(Agent)
             .where(and_(
                 Agent.user_id == user_id,
-                Agent.name == "Assistant par défaut",
+                Agent.name == "Assistant par dÃ©faut",
                 Agent.is_active == True
             ))
         )
@@ -108,7 +108,7 @@ class ChatService:
         
         if not agent:
             agent = Agent(
-                name="Assistant par défaut",
+                name="Assistant par dÃ©faut",
                 description="Votre assistant personnel",
                 system_prompt="Tu es un assistant IA serviable et professionnel.",
                 category="general",
