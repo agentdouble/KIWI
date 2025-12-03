@@ -72,8 +72,9 @@ DB_PORT=5432
 SECRET_KEY=changez-moi-en-production
 JWT_SECRET_KEY=changez-moi-aussi
 
-# Ajoutez votre clé API
-MISTRAL_API_KEY=votre-cle-mistral
+# Ajoutez votre clé API OpenAI
+OPENAI_API_KEY=votre-cle-openai
+# Optionnel: OPENAI_BASE_URL=https://api.openai.com/v1
 ```
 
 ## Commandes Utiles
@@ -121,4 +122,4 @@ uv sync
 
 ---
 
-**Astuce** : Utilisez `mistral-small` comme modèle par défaut pour des réponses plus rapides pendant le développement.
+**Astuce** : Utilisez `gpt-4o-mini` comme modèle par défaut pour des réponses rapides pendant le développement.
