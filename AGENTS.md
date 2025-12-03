@@ -34,3 +34,5 @@ Utilise toujours uv pour gestion de package python
 Don't write/change any code until you're very confident (95% or more) in what needs to be done. If unclear, ask for more info.
 
 A chaque fois que tu fais une modif, commit les changements
+A chaque fois que tu fais une modif, teste les changements et assure toi que ça fonctionne. Sinon continue
+Tu peux tester avec devtools. 

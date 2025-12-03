@@ -210,6 +210,7 @@ async def edit_message(
 @router.post("/stream")
 @limiter.limit(AI_RATE_LIMIT)
 async def stream_message(
+    request: Request,
     message_request: SendMessageRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
