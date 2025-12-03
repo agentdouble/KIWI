@@ -7,6 +7,16 @@ from app.models.document import Document, EntityType
 from app.models.document_chunk import DocumentChunk
 from app.models.user import User
 from app.models.feedback_loop import FeedbackLoop
+from app.models.rbac import (
+    Group,
+    GroupMember,
+    Permission,
+    PrincipalRole,
+    Role,
+    RolePermission,
+    ServiceAccount,
+    ServiceToken,
+)
 
 __all__ = [
     "Base",
@@ -20,4 +30,12 @@ __all__ = [
     "User",
     "DocumentChunk",
     "FeedbackLoop",
+    "Role",
+    "Permission",
+    "RolePermission",
+    "PrincipalRole",
+    "Group",
+    "GroupMember",
+    "ServiceAccount",
+    "ServiceToken",
 ]
