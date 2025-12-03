@@ -1,19 +1,19 @@
 from typing import List, Dict, AsyncGenerator, Tuple, Optional
-from app.config import settings
-from app.services.mistral_service import MistralService
-from app.services.vllm_service import VLLMService
 import logging
+from app.config import settings
+from app.services.openai_service import OpenAIService
+from app.services.vllm_service import VLLMService
 
 logger = logging.getLogger(__name__)
 
 
 class LLMService:
-    """Service abstrait qui utilise soit Mistral API soit vLLM selon la configuration"""
-
-    def __init__(self) -> None:
+    """Service abstrait qui utilise soit une API OpenAI-compatible soit vLLM selon la configuration"""
+    
+    def __init__(self):
         if settings.is_api_mode:
-            logger.info("🌐 Initializing LLM Service in API mode (Mistral)")
-            self._service = MistralService()
+            logger.info("🌐 Initializing LLM Service in API mode (OpenAI-compatible)")
+            self._service = OpenAIService()
             self.mode = "api"
         else:
             logger.info("🖥️ Initializing LLM Service in LOCAL mode (vLLM)")
@@ -28,13 +28,13 @@ class LLMService:
         tool_choice: Optional[str] = None,
     ) -> str:
         """Génération simple (non-streaming)"""
-        return await self._service.generate_response(
-            messages,
-            tools,
-            temperature=temperature,
-            tool_choice=tool_choice,
-        )
-
+        if self.mode == "api":
+            # API service supporte les tools
+            return await self._service.generate_response(messages, tools, temperature=temperature, tool_choice=tool_choice)
+        else:
+            # VLLMService supporte les tools
+            return await self._service.generate_response(messages, tools, temperature=temperature, tool_choice=tool_choice)
+    
     async def generate_response_with_metadata(
         self,
         messages: List[Dict],
@@ -43,16 +43,25 @@ class LLMService:
         tool_choice: Optional[str] = None,
     ) -> Tuple[str, Dict]:
         """Génération avec métadonnées de performance"""
-        response, metadata = await self._service.generate_response_with_metadata(
-            messages,
-            tools,
-            temperature=temperature,
-            tool_choice=tool_choice,
-        )
-        # S'assurer que le mode est toujours renseigné
-        metadata.setdefault("mode", self.mode)
-        return response, metadata
-
+        if self.mode == "api":
+            # API service supporte les tools
+            response, metadata = await self._service.generate_response_with_metadata(
+                messages,
+                tools,
+                temperature=temperature,
+                tool_choice=tool_choice,
+            )
+            metadata["mode"] = "api"
+            return response, metadata
+        else:
+            # VLLMService supporte les tools
+            return await self._service.generate_response_with_metadata(
+                messages,
+                tools,
+                temperature=temperature,
+                tool_choice=tool_choice,
+            )
+    
     async def generate_stream_response(
         self,
         messages: List[Dict],
@@ -61,21 +70,33 @@ class LLMService:
         tool_choice: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
         """Génération en streaming pour SSE"""
-        async for chunk in self._service.generate_stream_response(
-            messages,
-            tools,
-            temperature=temperature,
-            tool_choice=tool_choice,
-        ):
-            yield chunk
-
+        if self.mode == "api":
+            # API service supporte les tools
+            async for chunk in self._service.generate_stream_response(
+                messages,
+                tools,
+                temperature=temperature,
+                tool_choice=tool_choice,
+            ):
+                yield chunk
+        else:
+            # VLLMService supporte les tools
+            async for chunk in self._service.generate_stream_response(
+                messages,
+                tools,
+                temperature=temperature,
+                tool_choice=tool_choice,
+            ):
+                yield chunk
+    
     @property
     def model_name(self) -> str:
         """Retourne le nom du modèle utilisé"""
         if self.mode == "api":
-            return settings.mistral_model
-        return settings.vllm_model_name
-
+            return settings.openai_model
+        else:
+            return settings.vllm_model_name
+    
     @property
     def is_local_mode(self) -> bool:
         """Vérifie si on est en mode local"""

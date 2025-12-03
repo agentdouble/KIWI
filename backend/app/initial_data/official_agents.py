@@ -5,6 +5,7 @@ from typing import Dict, List
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models.agent import Agent
 from app.models.user import User
 
@@ -39,7 +40,7 @@ OFFICIAL_AGENTS: List[Dict] = [
         "capabilities": ["powerpoint", "slides", FORCE_POWERPOINT_MARKER],
         "tags": ["official", "powerpoint", FORCE_POWERPOINT_MARKER],
         "category": "communication",
-        "model": "mistral-small-latest",
+        "model": settings.openai_model,
         "is_default": False,
         "parameters": {
             "temperature": 0.2,

@@ -200,13 +200,20 @@ LLM_MODE=api
 # false = désactive la vérification SSL (utile pour un vLLM distant avec certificat autosigné, à utiliser avec prudence)
 LLM_VERIFY_SSL=true
 
-# Mode API (Mistral Cloud)
-MISTRAL_API_KEY=your-mistral-key
-MISTRAL_MODEL=mistral-small-latest
+# Mode API (OpenAI standard)
+OPENAI_API_KEY=your-openai-key
+OPENAI_MODEL=gpt-4o-mini
+# Facultatif: pointer vers un endpoint OpenAI-compatible (ex: https://api.openai.com/v1 ou proxy vLLM)
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_TIMEOUT=120
+
+# Vision (Pixtral) en mode API
 VISION_MODEL=pixtral-large-latest
 # Optionnel : endpoint API custom compatible OpenAI (utile pour d'autres VLM)
-# VISION_API_URL=https://api.mistral.ai/v1/chat/completions
-# VISION_API_KEY=${MISTRAL_API_KEY}
+VISION_API_URL=https://api.mistral.ai/v1/chat/completions
+# Utilise VISION_API_KEY ou, par défaut, MISTRAL_API_KEY
+VISION_API_KEY=${MISTRAL_API_KEY}
+MISTRAL_API_KEY=your-mistral-key
 
 # Mode local (vLLM + Vision)
 # Utilisez une URL joignable depuis le backend (localhost, IP privée, ...)
@@ -216,8 +223,8 @@ VISION_VLLM_URL=http://localhost:8085/v1/chat/completions
 VISION_VLLM_MODEL=pixtral-large-latest  # ex: internvl2-8b, minicpm-v, etc.
 
 # Embeddings
-EMBEDDING_PROVIDER=mistral  # automatique si LLM_MODE=api
-EMBEDDING_MODEL=mistral-embed
+EMBEDDING_PROVIDER=openai  # automatique si LLM_MODE=api
+EMBEDDING_MODEL=text-embedding-3-small
 # EMBEDDING_LOCAL_MODEL_PATH=/home/llama/models/base_models/bge-reranker-large (obligatoire si EMBEDDING_PROVIDER=local)
 ```
 
@@ -242,13 +249,6 @@ uv run pytest
 cd frontend
 npm test
 ```
-
-## Refactorisation backend
-
-- `app.services.llm_service.LLMService` centralise la délégation vers les modes API (`MistralService`) et local (`VLLMService`) tout en préservant le comportement existant.
-- `app.api.router.api_router` enregistre explicitement toutes les routes (y compris `auth`) au démarrage, ce qui évite de masquer d'éventuelles erreurs d'import.
-- `app.main` utilise un logger de module unique pour la journalisation HTTP, les exceptions et Socket.IO.
-- Les derniers appels `print` de débogage backend ont été remplacés par une journalisation structurée (`logging`) dans `app.config`, `app.api.documents` et `app.utils.dependencies`, afin d'être prêts pour la production et d'unifier les logs.
 
 ## Contribution
 

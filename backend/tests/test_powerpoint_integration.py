@@ -11,7 +11,7 @@ backend_path = Path(__file__).parent / "backend"
 sys.path.insert(0, str(backend_path))
 
 # Set up environment
-os.environ["MISTRAL_API_KEY"] = os.environ.get("MISTRAL_API_KEY", "")
+os.environ["OPENAI_API_KEY"] = os.environ.get("OPENAI_API_KEY", "")
 
 async def test_mcp_detection():
     """Test MCP service detection of PowerPoint requests."""
@@ -49,16 +49,16 @@ async def test_tool_definition():
     import json
     print(json.dumps(tools, indent=2, ensure_ascii=False))
 
-async def test_mistral_with_tools():
-    """Test Mistral service with tools."""
-    from app.services.mistral_service import MistralService
+async def test_openai_with_tools():
+    """Test OpenAI service with tools."""
+    from app.services.openai_service import OpenAIService
     from app.services.mcp_service import get_mcp_service
     
-    if not os.environ.get("MISTRAL_API_KEY"):
-        print("❌ MISTRAL_API_KEY not set. Skipping Mistral test.")
+    if not os.environ.get("OPENAI_API_KEY"):
+        print("❌ OPENAI_API_KEY not set. Skipping OpenAI test.")
         return
     
-    mistral = MistralService()
+    service = OpenAIService()
     mcp_service = get_mcp_service()
     
     messages = [
@@ -67,13 +67,13 @@ async def test_mistral_with_tools():
     
     tools = mcp_service.get_available_tools()
     
-    print("Testing Mistral with PowerPoint tool:")
+    print("Testing OpenAI with PowerPoint tool:")
     print("-" * 40)
     print(f"User message: {messages[0]['content']}")
-    print("Calling Mistral with tools...")
+    print("Calling OpenAI with tools...")
     
     try:
-        response = await mistral.generate_response(messages, tools)
+        response = await service.generate_response(messages, tools)
         print(f"Response: {response}")
     except Exception as e:
         print(f"Error: {e}")
@@ -135,7 +135,7 @@ async def main():
     await test_tool_definition()
     print()
     
-    await test_mistral_with_tools()
+    await test_openai_with_tools()
     print()
     
     await test_message_service()

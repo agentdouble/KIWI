@@ -13,7 +13,9 @@ async def ensure_document_processing_schema() -> None:
         # Créer l'extension vector en dehors d'une transaction contrôlée
         try:
             async with engine.connect() as raw_conn:
-                autocommit_conn = raw_conn.execution_options(isolation_level="AUTOCOMMIT")
+                autocommit_conn = await raw_conn.execution_options(
+                    isolation_level="AUTOCOMMIT"
+                )
                 await autocommit_conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         except Exception as ext:  # pragma: no cover - optional extension
             logger.warning("pgvector extension unavailable or lacks permissions: %s", ext)

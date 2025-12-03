@@ -67,5 +67,5 @@ export function estimateConversationTokens(messages: Array<{ content: string, ro
   return totalTokens
 }
 
-export const MAX_MISTRAL_TOKENS = 128000 // Limite de Mistral Small
+export const MAX_OPENAI_TOKENS = 128000 // Limite contextuelle pour gpt-4o-mini
 export const SAFE_TOKEN_LIMIT = 120000 // Garder une marge de sécurité

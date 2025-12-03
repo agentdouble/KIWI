@@ -100,9 +100,10 @@ if __name__ == "__main__":
     print(f"   LLM_MODE: {settings.llm_mode}")
     
     if settings.is_api_mode:
-        print(f"   Mode: API (Mistral Cloud)")
-        print(f"   Modèle: {settings.mistral_model}")
-        print(f"   API Key: {'✅ Configurée' if settings.mistral_api_key else '❌ Manquante'}")
+        print(f"   Mode: API (OpenAI standard)")
+        print(f"   Modèle: {settings.openai_model}")
+        print(f"   API Key: {'✅ Configurée' if settings.openai_api_key else '❌ Manquante'}")
+        print(f"   Base URL: {settings.openai_base_url}")
     else:
         print(f"   Mode: LOCAL (vLLM)")
         print(f"   URL: {settings.vllm_api_url}")

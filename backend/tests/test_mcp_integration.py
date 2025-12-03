@@ -52,9 +52,9 @@ async def test_powerpoint_generation():
     """Test PowerPoint generation directly."""
     print("\n🎨 Testing PowerPoint Generation...")
     
-    # Check if MISTRAL_API_KEY is available
-    if not os.getenv("MISTRAL_API_KEY"):
-        print("⚠️ MISTRAL_API_KEY not set, skipping generation test")
+    # Check if OPENAI_API_KEY is available
+    if not os.getenv("OPENAI_API_KEY"):
+        print("⚠️ OPENAI_API_KEY not set, skipping generation test")
         return False
     
     try:
@@ -112,39 +112,37 @@ async def test_powerpoint_generation():
         traceback.print_exc()
         return False
 
-async def test_mistral_integration():
-    """Test Mistral service with tools."""
-    print("\n🤖 Testing Mistral Service Integration...")
+async def test_openai_integration():
+    """Test OpenAI service with tools."""
+    print("\n🤖 Testing OpenAI Service Integration...")
     
-    if not os.getenv("MISTRAL_API_KEY"):
-        print("⚠️ MISTRAL_API_KEY not set, skipping Mistral test")
+    if not os.getenv("OPENAI_API_KEY"):
+        print("⚠️ OPENAI_API_KEY not set, skipping OpenAI test")
         return False
     
     try:
-        from app.services.mistral_service import MistralService
+        from app.services.openai_service import OpenAIService
         from app.services.mcp_service import get_mcp_service
         
-        mistral_service = MistralService()
+        openai_service = OpenAIService()
         mcp_service = get_mcp_service()
         
-        # Test messages
         messages = [
             {"role": "user", "content": "peux-tu générer un powerpoint sur les énergies renouvelables?"}
         ]
         
-        # Get tools
         tools = await mcp_service.get_available_tools()
         
-        print("🔄 Testing Mistral with tools...")
-        response = await mistral_service.generate_response(messages, tools)
+        print("🔄 Testing OpenAI with tools...")
+        response = await openai_service.generate_response(messages, tools)
         
-        print(f"✅ Mistral response received ({len(response)} chars)")
+        print(f"✅ OpenAI response received ({len(response)} chars)")
         print(f"   Response preview: {response[:200]}...")
         
         return True
         
     except Exception as e:
-        print(f"❌ Mistral integration test failed: {e}")
+        print(f"❌ OpenAI integration test failed: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -159,17 +157,17 @@ async def main():
     
     # Check if MCP dependencies are available
     try:
-        import mistralai
-        print("  ✅ Mistral AI library available")
+        import openai  # noqa: F401
+        print("  ✅ OpenAI library available")
     except ImportError:
-        print("  ❌ Mistral AI library not found")
+        print("  ❌ OpenAI library not found")
         return 1
     
-    # Check MISTRAL_API_KEY
-    if os.getenv("MISTRAL_API_KEY"):
-        print("  ✅ MISTRAL_API_KEY configured")
+    # Check OPENAI_API_KEY
+    if os.getenv("OPENAI_API_KEY"):
+        print("  ✅ OPENAI_API_KEY configured")
     else:
-        print("  ⚠️ MISTRAL_API_KEY not set (some tests will be skipped)")
+        print("  ⚠️ OPENAI_API_KEY not set (some tests will be skipped)")
     
     # Run tests
     results = []
@@ -178,12 +176,12 @@ async def main():
     results.append(await test_mcp_service())
     
     # Test 2: PowerPoint Generation (only if API key is available)
-    if os.getenv("MISTRAL_API_KEY"):
+    if os.getenv("OPENAI_API_KEY"):
         results.append(await test_powerpoint_generation())
     
-    # Test 3: Mistral Integration (only if API key is available)  
-    if os.getenv("MISTRAL_API_KEY"):
-        results.append(await test_mistral_integration())
+    # Test 3: OpenAI Integration (only if API key is available)  
+    if os.getenv("OPENAI_API_KEY"):
+        results.append(await test_openai_integration())
     
     # Summary
     print("\n" + "=" * 60)
@@ -201,7 +199,7 @@ async def main():
     else:
         print(f"⚠️ Some tests failed ({passed}/{total})")
         print("\n🔧 Check the error messages above and:")
-        print("  1. Ensure MISTRAL_API_KEY is set")
+        print("  1. Ensure OPENAI_API_KEY is set")
         print("  2. Run ./install_mcp_dependencies.sh")
         print("  3. Check the MCP configuration")
         return 1

@@ -131,12 +131,17 @@ JWT_SECRET_KEY=your-jwt-secret-key-change-this-in-production
 LLM_MODE=api
 
 # API IA (si mode api)
-MISTRAL_API_KEY=your-mistral-api-key
-MISTRAL_MODEL=mistral-small-latest
+OPENAI_API_KEY=your-openai-api-key
+OPENAI_MODEL=gpt-4o-mini
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_TIMEOUT=120
 VISION_MODEL=pixtral-large-latest
 # Optionnel : endpoint custom compatible OpenAI pour un VLM tiers
-# VISION_API_URL=https://api.mistral.ai/v1/chat/completions
+VISION_API_URL=https://api.mistral.ai/v1/chat/completions
 # VISION_API_KEY=${MISTRAL_API_KEY}
+# Optionnel: clé Mistral si vous utilisez Pixtral/vision
+MISTRAL_API_KEY=
+MISTRAL_MODEL=mistral-small-latest
 
 # vLLM (si mode local)
 # Utilisez une URL joignable par le backend (localhost, IP interne, ...)
@@ -146,8 +151,8 @@ VISION_VLLM_URL=http://localhost:8085/v1/chat/completions
 VISION_VLLM_MODEL=pixtral-large-latest
 
 # Embeddings
-EMBEDDING_PROVIDER=mistral  # automatique si LLM_MODE=api
-EMBEDDING_MODEL=mistral-embed
+EMBEDDING_PROVIDER=openai  # automatique si LLM_MODE=api
+EMBEDDING_MODEL=text-embedding-3-small
 # EMBEDDING_LOCAL_MODEL_PATH=/home/llama/models/base_models/bge-reranker-large
 
 # Application

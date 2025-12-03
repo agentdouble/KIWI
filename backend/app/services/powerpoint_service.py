@@ -1,14 +1,11 @@
 """Service for PowerPoint generation using MCP PowerPoint module."""
-
-import os
 import sys
 import json
-import asyncio
 from pathlib import Path
 from typing import Dict, Any, Optional
 from loguru import logger
 from datetime import datetime
-from mistralai import Mistral
+from openai import AsyncOpenAI
 
 # Add MCP PowerPoint module to path
 mcp_path = Path(__file__).parent.parent.parent / "mcp" / "powerpoint_mcp"
@@ -29,12 +26,17 @@ class PowerPointService:
         self.output_dir = Path(__file__).parent.parent.parent / "uploads" / "powerpoints"
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
-        # Initialize Mistral client using config settings
+        # Initialize OpenAI client using config settings
         from app.config import settings
-        api_key = settings.mistral_api_key
+        api_key = settings.openai_api_key
         if not api_key:
-            logger.warning("MISTRAL_API_KEY not found in settings")
-        self.mistral_client = Mistral(api_key=api_key) if api_key else None
+            logger.warning("OPENAI_API_KEY not found in settings")
+        self.openai_client = AsyncOpenAI(
+            api_key=api_key,
+            base_url=settings.openai_base_url,
+            timeout=settings.openai_timeout,
+        ) if api_key else None
+        self.openai_model = settings.openai_model
         
     async def generate_from_text(
         self, 
@@ -194,8 +196,8 @@ class PowerPointService:
         Returns:
             JSON structure for PowerPoint or None
         """
-        if not self.mistral_client:
-            raise ValueError("Mistral client not initialized. Please set MISTRAL_API_KEY")
+        if not self.openai_client:
+            raise ValueError("OpenAI client not initialized. Please set OPENAI_API_KEY")
         
         try:
             # Build prompts
@@ -208,10 +210,9 @@ class PowerPointService:
             
             user_prompt = self.prompt_engine.format_user_prompt(text)
             
-            # Generate with Mistral
-            response = await asyncio.to_thread(
-                self.mistral_client.chat.complete,
-                model="mistral-large-latest",
+            # Generate with OpenAI-compatible API
+            response = await self.openai_client.chat.completions.create(
+                model=self.openai_model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
@@ -221,10 +222,11 @@ class PowerPointService:
             )
             
             if not response.choices:
-                logger.error("No response from Mistral")
+                logger.error("No response from OpenAI")
                 return None
             
-            content = response.choices[0].message.content
+            raw_content = response.choices[0].message.content
+            content = self._content_to_str(raw_content)
             
             # Extract JSON from response
             json_str = self._extract_json(content)
@@ -244,8 +246,24 @@ class PowerPointService:
             logger.error(f"Error converting text to JSON: {str(e)}")
             return None
     
+    def _content_to_str(self, content: Any) -> str:
+        """Normalise le contenu OpenAI (str ou liste de blocs) en texte."""
+        if content is None:
+            return ""
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts = []
+            for item in content:
+                if isinstance(item, dict) and item.get("type") == "text":
+                    parts.append(item.get("text", ""))
+                else:
+                    parts.append(str(item))
+            return "".join(parts)
+        return str(content)
+    
     def _extract_json(self, content: str) -> Optional[str]:
-        """Extract JSON from Mistral response."""
+        """Extract JSON from LLM response."""
         import re
         
         # Try to find JSON between ```json and ``` markers
@@ -262,15 +280,14 @@ class PowerPointService:
     
     async def _refine_json(self, json_data: Dict[str, Any]) -> Dict[str, Any]:
         """Refine the generated JSON structure."""
-        if not self.mistral_client:
+        if not self.openai_client:
             return json_data
         
         try:
             refinement_prompt = self.prompt_engine.refinement_prompt
             
-            response = await asyncio.to_thread(
-                self.mistral_client.chat.complete,
-                model="mistral-large-latest",
+            response = await self.openai_client.chat.completions.create(
+                model=self.openai_model,
                 messages=[
                     {"role": "system", "content": refinement_prompt},
                     {"role": "user", "content": f"Please refine this presentation JSON:\n\n{json.dumps(json_data, indent=2)}"}
@@ -280,7 +297,7 @@ class PowerPointService:
             )
             
             if response.choices:
-                content = response.choices[0].message.content
+                content = self._content_to_str(response.choices[0].message.content)
                 refined_json_str = self._extract_json(content)
                 if refined_json_str:
                     return json.loads(refined_json_str)

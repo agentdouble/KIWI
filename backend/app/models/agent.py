@@ -22,7 +22,7 @@ class Agent(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
     
     # Configuration LLM
-    model = Column(String(100), default="mistral-small-latest")
+    model = Column(String(100), default="gpt-4o-mini")
     category = Column(String(50), default='general')
     capabilities = Column(ARRAY(Text), default=list)
     tags = Column(ARRAY(Text), default=list)

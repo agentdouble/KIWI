@@ -11,6 +11,7 @@ from app.config import settings
 from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
 from app.utils.chunking import split_text_into_chunks
+from openai import AsyncOpenAI
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -37,7 +38,7 @@ class EmbeddingService:
         text: str,
     ) -> List[DocumentChunk]:
         """
-        Découpe le texte, calcule les embeddings (Mistral) et upsert en DB.
+        Découpe le texte, calcule les embeddings (OpenAI par défaut) et upsert en DB.
         """
         chunks = split_text_into_chunks(
             text,
@@ -116,12 +117,49 @@ class EmbeddingService:
                 logger.warning("Could not write pgvector embeddings (non-blocking): %s", message)
 
     async def _embed_texts(self, texts: Sequence[str]) -> List[List[float]]:
+        if self.provider == "openai":
+            return await self._embed_with_openai(texts)
         if self.provider == "mistral":
             return await self._embed_with_mistral(texts)
         if self.provider == "local":
             return await self._embed_with_local_model(texts)
         else:
             raise ValueError(f"Unsupported embedding provider: {self.provider}")
+
+    async def _embed_with_openai(self, texts: Sequence[str]) -> List[List[float]]:
+        """Appel batch à l'API OpenAI (ou proxy compatible)."""
+        client = AsyncOpenAI(
+            api_key=settings.openai_api_key,
+            base_url=settings.openai_base_url,
+            timeout=settings.openai_timeout,
+        )
+        all_vectors: List[List[float]] = []
+
+        effective_batch = max(1, int(self.batch_size) or 64)
+        pos = 0
+
+        while pos < len(texts):
+            end = min(pos + effective_batch, len(texts))
+            batch = list(texts[pos:end])
+            try:
+                resp = await client.embeddings.create(
+                    model=self.model,
+                    input=batch,
+                )
+                vectors = [item.embedding for item in resp.data]
+                all_vectors.extend(vectors)
+                pos = end
+            except Exception as e:
+                msg = str(e)
+                if "batch" in msg.lower() or "Too many inputs" in msg:
+                    if effective_batch <= 1:
+                        raise
+                    effective_batch = max(1, effective_batch // 2)
+                    logger.warning("Embedding batch too large, reducing to %d", effective_batch)
+                    continue
+                raise
+
+        return all_vectors
 
     async def _embed_with_mistral(self, texts: Sequence[str]) -> List[List[float]]:
         """Appel batch à l'API Mistral Embeddings."""

@@ -53,6 +53,6 @@ if __name__ == "__main__":
     
     print("\n✅ MCP Service is working correctly!")
     print("\nTo complete the integration:")
-    print("1. Ensure MISTRAL_API_KEY is set in backend/.env")
+    print("1. Ensure OPENAI_API_KEY is set in backend/.env")
     print("2. Restart the backend server") 
     print("3. Test with: 'genere powerpoint sur les animaux'")
