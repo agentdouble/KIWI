@@ -14,6 +14,10 @@ class CacheService:
     def __init__(self):
         self.redis_client: Optional[redis.Redis] = None
         self._connection_url = settings.redis_url
+        # Fallback local pour les verrous lorsque Redis n'est pas disponible.
+        # Ce mécanisme reste limité au processus courant mais évite de bloquer l'application
+        # lorsque Redis est réellement optionnel.
+        self._local_locks: dict[str, str] = {}
 
     async def connect(self):
         """Établir la connexion Redis."""
@@ -97,15 +101,26 @@ class CacheService:
         Acquérir un verrou distribué.
 
         Retourne un token si le verrou est acquis, None si déjà verrouillé.
-        Lève une erreur si Redis n'est pas disponible ou en cas d'erreur réseau.
+        Si Redis n'est pas disponible, utilise un verrou local en mémoire (meilleur-effort)
+        et loggue un avertissement explicite.
         """
-        if not self.redis_client:
-            logger.error("Redis client is not available for lock %s", key)
-            raise RuntimeError("Redis lock unavailable")
-
         token = str(uuid4())
+        if not self.redis_client:
+            # Fallback local : on reste dans le même processus, donc moins robuste qu'un verrou distribué,
+            # mais cela permet à l'application de fonctionner lorsque Redis est réellement optionnel.
+            existing = self._local_locks.get(key)
+            if existing is not None:
+                logger.warning(
+                    "Local lock already held for key %s (Redis unavailable)", key
+                )
+                return None
+            logger.warning(
+                "Acquiring local in-process lock for key %s (Redis unavailable)", key
+            )
+            self._local_locks[key] = token
+            return token
+
         try:
-            # SET key value NX EX ttl_seconds
             acquired = await self.redis_client.set(key, token, ex=ttl_seconds, nx=True)
             if acquired:
                 logger.info("Lock acquired for key %s", key)
@@ -123,7 +138,18 @@ class CacheService:
         Ne lève pas d'erreur fonctionnelle si le verrou n'existe plus, mais loggue les anomalies.
         """
         if not self.redis_client:
-            logger.error("Redis client is not available to release lock %s", key)
+            current = self._local_locks.get(key)
+            if current == token:
+                self._local_locks.pop(key, None)
+                logger.warning(
+                    "Local in-process lock released for key %s (Redis unavailable)",
+                    key,
+                )
+            else:
+                logger.warning(
+                    "Attempted to release local lock for key %s with mismatched token",
+                    key,
+                )
             return
 
         # Script LUA pour ne supprimer que si le token correspond
