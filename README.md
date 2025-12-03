@@ -25,6 +25,7 @@ FoyerGPT est une plateforme moderne de chat IA qui permet aux utilisateurs de cr
 - Historique des conversations persistant
 - Export des conversations
 - Indicateurs de frappe en temps réel
+- Verrouillage par conversation : une seule génération IA à la fois par chat (prévention du spam multi-compte / multi-onglets)
 
 ### Traitement intelligent de documents
 - Upload et analyse de documents multiformats
@@ -45,7 +46,7 @@ FoyerGPT est une plateforme moderne de chat IA qui permet aux utilisateurs de cr
 - **Base de données** : PostgreSQL avec SQLAlchemy 2.0
 - **Cache** : Redis pour les performances
 - **Temps réel** : Socket.IO pour les WebSockets
-- **Sécurité** : JWT, bcrypt, rate limiting
+- **Sécurité** : JWT, bcrypt, rate limiting (incluant les endpoints IA streaming) et verrous distribués Redis par conversation pour éviter les générations concurrentes
 
 ### Frontend (React/TypeScript)
 - **Framework** : React 19 avec TypeScript

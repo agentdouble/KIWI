@@ -14,6 +14,7 @@ from app.services.message_service import MessageService
 from app.services.feedback_service import FeedbackService
 from app.utils.auth import get_current_active_user
 from app.utils.rate_limit import limiter, AI_RATE_LIMIT
+from app.utils.cache import cache_service
 from app.models.user import User
 from app.models.chat import Chat
 from typing import Optional
@@ -77,8 +78,18 @@ async def send_message(
     current_user: User = Depends(get_current_active_user)
 ):
     logger = logging.getLogger(__name__)
-    
+    lock_key = cache_service.generate_key("chat_lock", message_request.chat_id)
+    lock_token: Optional[str] = None
+
     try:
+        lock_token = await cache_service.acquire_lock(lock_key, ttl_seconds=300)
+        if lock_token is None:
+            logger.warning("Concurrent send_message detected for chat %s", message_request.chat_id)
+            raise HTTPException(
+                status_code=409,
+                detail="Une génération est déjà en cours pour cette conversation.",
+            )
+
         logger.info(f"Received message request for chat: {message_request.chat_id}")
         logger.info(f"User: {current_user.email}")
         logger.info(f"Is regeneration: {message_request.is_regeneration}")
@@ -151,12 +162,15 @@ async def send_message(
             user_message_id=user_message_id,
             is_edited=assistant_message.is_edited,
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Unexpected error in send_message: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+    finally:
+        if lock_token:
+            await cache_service.release_lock(lock_key, lock_token)
 
 
 @router.patch("/{message_id}", response_model=MessageResponse)
@@ -194,6 +208,7 @@ async def edit_message(
     )
 
 @router.post("/stream")
+@limiter.limit(AI_RATE_LIMIT)
 async def stream_message(
     message_request: SendMessageRequest,
     db: AsyncSession = Depends(get_db),
@@ -203,22 +218,8 @@ async def stream_message(
     service = MessageService(db)
 
     chat_id = message_request.chat_id
-
-    if not await service.validate_chat_user(chat_id, current_user.id):
-        raise HTTPException(status_code=403, detail="Chat non autorisé")
-
-    chat = (
-        await db.execute(
-            select(Chat).where(Chat.id == message_request.chat_id)
-        )
-    ).scalar_one_or_none()
-
-    if chat:
-        chat.last_message_at = func.now()
-        await db.commit()
-
-    agent = await service.get_chat_agent(chat_id)
-    base_system = agent.system_prompt if agent else None
+    lock_key = cache_service.generate_key("chat_lock", chat_id)
+    lock_token: Optional[str] = None
 
     async def event_generator():
         user_message_id = None
@@ -226,6 +227,34 @@ async def stream_message(
         tool_calls: list[str] | None = None
 
         try:
+            nonlocal lock_token
+
+            lock_token = await cache_service.acquire_lock(lock_key, ttl_seconds=300)
+            if lock_token is None:
+                logger.warning("Concurrent stream_message detected for chat %s", chat_id)
+                error_payload = {
+                    "type": "error",
+                    "error": "Une génération est déjà en cours pour cette conversation.",
+                }
+                yield f"data: {json.dumps(error_payload)}\n\n"
+                return
+
+            if not await service.validate_chat_user(chat_id, current_user.id):
+                raise HTTPException(status_code=403, detail="Chat non autorisé")
+
+            chat = (
+                await db.execute(
+                    select(Chat).where(Chat.id == message_request.chat_id)
+                )
+            ).scalar_one_or_none()
+
+            if chat:
+                chat.last_message_at = func.now()
+                await db.commit()
+
+            agent = await service.get_chat_agent(chat_id)
+            base_system = agent.system_prompt if agent else None
+
             if message_request.is_regeneration:
                 logger.info("Streaming regeneration requested for chat %s", chat_id)
                 await service.delete_last_assistant_message(chat_id)
@@ -264,6 +293,9 @@ async def stream_message(
             logger.error("Unexpected error during streaming: %s", e, exc_info=True)
             error_payload = {"type": "error", "error": str(e)}
             yield f"data: {json.dumps(error_payload)}\n\n"
+        finally:
+            if lock_token:
+                await cache_service.release_lock(lock_key, lock_token)
 
     return StreamingResponse(
         event_generator(),
