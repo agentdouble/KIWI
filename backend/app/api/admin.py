@@ -8,10 +8,20 @@ from sqlalchemy import func, select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models.agent import Agent
-from app.models.chat import Chat
-from app.models.message import Message
-from app.models.user import User
+from app.models import (
+    Agent,
+    Chat,
+    Group,
+    GroupMember,
+    Message,
+    Permission,
+    PrincipalRole,
+    Role,
+    RolePermission,
+    ServiceAccount,
+    ServiceToken,
+    User,
+)
 from app.schemas.admin import (
     ChatCountPerAgent,
     ChatCountPerDay,
@@ -21,8 +31,25 @@ from app.schemas.admin import (
     UserMessagesToday,
     AdminCreateUserRequest,
     AdminResetPasswordRequest,
+    GroupCreateRequest,
+    GroupDetail,
+    GroupSummary,
+    PermissionSummary,
+    RoleSummary,
+    ServiceAccountCreateRequest,
+    ServiceAccountSummary,
+    ServiceAccountTokenResponse,
 )
 from app.utils.auth import get_current_admin_user
+from app.services.rbac_service import (
+    PERM_RBAC_MANAGE_GROUPS,
+    PERM_RBAC_MANAGE_ROLES,
+    PERM_RBAC_MANAGE_SERVICES,
+    assign_default_roles_for_user,
+    generate_service_token,
+    hash_service_token,
+    user_has_permission,
+)
 
 router = APIRouter(tags=["admin"])
 logger = logging.getLogger(__name__)
@@ -221,6 +248,9 @@ async def create_user(
     await db.commit()
     await db.refresh(user)
 
+    await assign_default_roles_for_user(db, user)
+    await db.commit()
+
     logger.info("Admin %s created user %s", current_admin.trigramme, user.trigramme)
     return _serialize_admin_user(user)
 
@@ -272,3 +302,459 @@ async def reset_user_password(
 
     logger.info("Admin %s reset password for user %s", current_admin.trigramme, user.trigramme)
     return _serialize_admin_user(user)
+
+
+@router.get("/permissions", response_model=List[PermissionSummary])
+async def list_permissions(
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    result = await db.execute(select(Permission).order_by(Permission.code.asc()))
+    permissions = result.scalars().all()
+    return [
+        PermissionSummary(code=perm.code, description=perm.description)
+        for perm in permissions
+    ]
+
+
+@router.get("/roles", response_model=List[RoleSummary])
+async def list_roles(
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    roles_result = await db.execute(select(Role).order_by(Role.name.asc()))
+    roles = roles_result.scalars().all()
+
+    summaries: List[RoleSummary] = []
+    for role in roles:
+        perm_result = await db.execute(
+            select(Permission.code)
+            .join(RolePermission, RolePermission.permission_id == Permission.id)
+            .where(RolePermission.role_id == role.id)
+        )
+        perm_codes = {code for (code,) in perm_result.all()}
+        summaries.append(
+            RoleSummary(
+                id=role.id,
+                name=role.name,
+                description=role.description,
+                is_system=bool(role.is_system),
+                permissions=sorted(perm_codes),
+            )
+        )
+    return summaries
+
+
+@router.get("/users/{user_id}/roles", response_model=List[RoleSummary])
+async def list_user_roles(
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utilisateur introuvable.")
+
+    direct_roles_result = await db.execute(
+        select(Role)
+        .join(PrincipalRole, PrincipalRole.role_id == Role.id)
+        .where(
+            PrincipalRole.principal_type == "user",
+            PrincipalRole.principal_id == user.id,
+        )
+        .order_by(Role.name.asc())
+    )
+    roles = direct_roles_result.scalars().all()
+
+    summaries: List[RoleSummary] = []
+    for role in roles:
+        perm_result = await db.execute(
+            select(Permission.code)
+            .join(RolePermission, RolePermission.permission_id == Permission.id)
+            .where(RolePermission.role_id == role.id)
+        )
+        perm_codes = {code for (code,) in perm_result.all()}
+        summaries.append(
+            RoleSummary(
+                id=role.id,
+                name=role.name,
+                description=role.description,
+                is_system=bool(role.is_system),
+                permissions=sorted(perm_codes),
+            )
+        )
+    return summaries
+
+
+@router.post("/users/{user_id}/roles/{role_name}", response_model=RoleSummary)
+async def assign_role_to_user(
+    user_id: UUID,
+    role_name: str,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    if not await user_has_permission(db, current_admin, PERM_RBAC_MANAGE_ROLES):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="RBAC role management not allowed")
+
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utilisateur introuvable.")
+
+    role_result = await db.execute(select(Role).where(Role.name == role_name))
+    role = role_result.scalar_one_or_none()
+    if not role:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Rôle introuvable.")
+
+    link_result = await db.execute(
+        select(PrincipalRole).where(
+            PrincipalRole.principal_type == "user",
+            PrincipalRole.principal_id == user.id,
+            PrincipalRole.role_id == role.id,
+        )
+    )
+    link = link_result.scalar_one_or_none()
+    if not link:
+        db.add(
+            PrincipalRole(
+                principal_type="user",
+                principal_id=user.id,
+                role_id=role.id,
+            )
+        )
+        await db.commit()
+
+    perm_result = await db.execute(
+        select(Permission.code)
+        .join(Role, Role.permissions)
+        .where(Role.id == role.id)
+    )
+    perm_codes = {code for (code,) in perm_result.all()}
+    return RoleSummary(
+        id=role.id,
+        name=role.name,
+        description=role.description,
+        is_system=bool(role.is_system),
+        permissions=sorted(perm_codes),
+    )
+
+
+@router.delete("/users/{user_id}/roles/{role_name}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_role_from_user(
+    user_id: UUID,
+    role_name: str,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    if not await user_has_permission(db, current_admin, PERM_RBAC_MANAGE_ROLES):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="RBAC role management not allowed")
+
+    role_result = await db.execute(select(Role).where(Role.name == role_name))
+    role = role_result.scalar_one_or_none()
+    if not role:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Rôle introuvable.")
+
+    link_result = await db.execute(
+        select(PrincipalRole).where(
+            PrincipalRole.principal_type == "user",
+            PrincipalRole.principal_id == user_id,
+            PrincipalRole.role_id == role.id,
+        )
+    )
+    link = link_result.scalar_one_or_none()
+    if link:
+        await db.delete(link)
+        await db.commit()
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/groups", response_model=List[GroupSummary])
+async def list_groups(
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    stmt = (
+        select(
+            Group,
+            func.count(GroupMember.id).label("member_count"),
+        )
+        .outerjoin(GroupMember, GroupMember.group_id == Group.id)
+        .group_by(Group.id)
+        .order_by(Group.name.asc())
+    )
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    return [
+        GroupSummary(
+            id=group.id,
+            name=group.name,
+            description=group.description,
+            is_system=bool(group.is_system),
+            member_count=int(member_count or 0),
+        )
+        for group, member_count in rows
+    ]
+
+
+@router.post("/groups", response_model=GroupSummary, status_code=status.HTTP_201_CREATED)
+async def create_group(
+    payload: GroupCreateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    if not await user_has_permission(db, current_admin, PERM_RBAC_MANAGE_GROUPS):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Group management not allowed")
+
+    existing = await db.execute(select(Group).where(Group.name == payload.name))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Un groupe existe déjà avec ce nom.")
+
+    group = Group(
+        name=payload.name,
+        description=payload.description,
+        is_system=False,
+    )
+    db.add(group)
+    await db.commit()
+    await db.refresh(group)
+
+    return GroupSummary(
+        id=group.id,
+        name=group.name,
+        description=group.description,
+        is_system=bool(group.is_system),
+        member_count=0,
+    )
+
+
+@router.get("/groups/{group_id}", response_model=GroupDetail)
+async def get_group(
+    group_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    group = await db.get(Group, group_id)
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Groupe introuvable.")
+
+    member_stmt = (
+        select(User)
+        .join(GroupMember, GroupMember.user_id == User.id)
+        .where(GroupMember.group_id == group.id)
+        .order_by(User.trigramme.asc())
+    )
+    members_result = await db.execute(member_stmt)
+    members = members_result.scalars().all()
+
+    return GroupDetail(
+        id=group.id,
+        name=group.name,
+        description=group.description,
+        is_system=bool(group.is_system),
+        member_count=len(members),
+        members=[_serialize_admin_user(user) for user in members],
+    )
+
+
+@router.delete("/groups/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_group(
+    group_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    if not await user_has_permission(db, current_admin, PERM_RBAC_MANAGE_GROUPS):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Group management not allowed")
+
+    group = await db.get(Group, group_id)
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Groupe introuvable.")
+
+    if group.is_system:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Les groupes système ne peuvent pas être supprimés.",
+        )
+
+    await db.delete(group)
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/groups/{group_id}/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def add_user_to_group(
+    group_id: UUID,
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    if not await user_has_permission(db, current_admin, PERM_RBAC_MANAGE_GROUPS):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Group management not allowed")
+
+    group = await db.get(Group, group_id)
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Groupe introuvable.")
+
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utilisateur introuvable.")
+
+    existing = await db.execute(
+        select(GroupMember).where(
+            GroupMember.group_id == group.id,
+            GroupMember.user_id == user.id,
+        )
+    )
+    if not existing.scalar_one_or_none():
+        db.add(GroupMember(group_id=group.id, user_id=user.id))
+        await db.commit()
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete("/groups/{group_id}/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_user_from_group(
+    group_id: UUID,
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    if not await user_has_permission(db, current_admin, PERM_RBAC_MANAGE_GROUPS):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Group management not allowed")
+
+    membership_result = await db.execute(
+        select(GroupMember).where(
+            GroupMember.group_id == group_id,
+            GroupMember.user_id == user_id,
+        )
+    )
+    membership = membership_result.scalar_one_or_none()
+    if membership:
+        await db.delete(membership)
+        await db.commit()
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/groups/{group_id}/roles/{role_name}", status_code=status.HTTP_204_NO_CONTENT)
+async def assign_role_to_group(
+    group_id: UUID,
+    role_name: str,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    if not await user_has_permission(db, current_admin, PERM_RBAC_MANAGE_ROLES):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="RBAC role management not allowed")
+
+    group = await db.get(Group, group_id)
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Groupe introuvable.")
+
+    role_result = await db.execute(select(Role).where(Role.name == role_name))
+    role = role_result.scalar_one_or_none()
+    if not role:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Rôle introuvable.")
+
+    existing = await db.execute(
+        select(PrincipalRole).where(
+            PrincipalRole.principal_type == "group",
+            PrincipalRole.principal_id == group.id,
+            PrincipalRole.role_id == role.id,
+        )
+    )
+    if not existing.scalar_one_or_none():
+        db.add(
+            PrincipalRole(
+                principal_type="group",
+                principal_id=group.id,
+                role_id=role.id,
+            )
+        )
+        await db.commit()
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete("/groups/{group_id}/roles/{role_name}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_role_from_group(
+    group_id: UUID,
+    role_name: str,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    if not await user_has_permission(db, current_admin, PERM_RBAC_MANAGE_ROLES):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="RBAC role management not allowed")
+
+    role_result = await db.execute(select(Role).where(Role.name == role_name))
+    role = role_result.scalar_one_or_none()
+    if not role:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Rôle introuvable.")
+
+    existing = await db.execute(
+        select(PrincipalRole).where(
+            PrincipalRole.principal_type == "group",
+            PrincipalRole.principal_id == group_id,
+            PrincipalRole.role_id == role.id,
+        )
+    )
+    link = existing.scalar_one_or_none()
+    if link:
+        await db.delete(link)
+        await db.commit()
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/services", response_model=List[ServiceAccountSummary])
+async def list_service_accounts(
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    result = await db.execute(select(ServiceAccount).order_by(ServiceAccount.name.asc()))
+    services = result.scalars().all()
+    return [
+        ServiceAccountSummary(
+            id=service.id,
+            name=service.name,
+            description=service.description,
+            is_active=bool(service.is_active),
+        )
+        for service in services
+    ]
+
+
+@router.post("/services", response_model=ServiceAccountTokenResponse, status_code=status.HTTP_201_CREATED)
+async def create_service_account(
+    payload: ServiceAccountCreateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    if not await user_has_permission(db, current_admin, PERM_RBAC_MANAGE_SERVICES):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Service management not allowed")
+
+    existing = await db.execute(select(ServiceAccount).where(ServiceAccount.name == payload.name))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Un service existe déjà avec ce nom.")
+
+    service = ServiceAccount(
+        name=payload.name,
+        description=payload.description,
+        is_active=True,
+    )
+    db.add(service)
+    await db.commit()
+    await db.refresh(service)
+
+    token_value = generate_service_token()
+    token_hash = hash_service_token(token_value)
+
+    token = ServiceToken(
+        service_id=service.id,
+        token_hash=token_hash,
+        label="default",
+        is_revoked=False,
+    )
+    db.add(token)
+    await db.commit()
+
+    return ServiceAccountTokenResponse(service_id=service.id, token=token_value)

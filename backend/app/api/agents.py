@@ -14,6 +14,14 @@ from app.schemas.agent import (
     UpdateAgentRequest,
 )
 from app.utils.auth import get_optional_current_user, get_current_active_user
+from app.services.rbac_service import (
+    PERM_AGENT_CREATE,
+    PERM_AGENT_DELETE_ANY,
+    PERM_AGENT_DELETE_OWN,
+    PERM_AGENT_UPDATE_ANY,
+    PERM_AGENT_UPDATE_OWN,
+    user_has_permission,
+)
 import uuid
 from typing import List, Optional
 from datetime import datetime, timedelta, timezone
@@ -223,6 +231,9 @@ async def create_agent(
     current_user: User = Depends(get_current_active_user)
 ):
     """Créer un nouvel agent (nécessite une authentification)"""
+    if not await user_has_permission(db, current_user, PERM_AGENT_CREATE):
+        raise HTTPException(status_code=403, detail="You are not allowed to create agents")
+
     agent = Agent(
         name=request.name,
         description=request.description,
@@ -292,10 +303,13 @@ async def update_agent(
     
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
-    
-    # Vérifier que l'utilisateur est le propriétaire
-    if agent.user_id != current_user.id and not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="You can only update your own agents")
+
+    is_owner = agent.user_id == current_user.id
+    can_update_own = await user_has_permission(db, current_user, PERM_AGENT_UPDATE_OWN)
+    can_update_any = await user_has_permission(db, current_user, PERM_AGENT_UPDATE_ANY)
+
+    if not ((is_owner and can_update_own) or can_update_any):
+        raise HTTPException(status_code=403, detail="You are not allowed to update this agent")
     
     # Mettre � jour les champs fournis
     if request.name is not None:
@@ -387,10 +401,13 @@ async def delete_agent(
     
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
-    
-    # Vérifier que l'utilisateur est le propriétaire
-    if agent.user_id != current_user.id and not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="You can only delete your own agents")
+
+    is_owner = agent.user_id == current_user.id
+    can_delete_own = await user_has_permission(db, current_user, PERM_AGENT_DELETE_OWN)
+    can_delete_any = await user_has_permission(db, current_user, PERM_AGENT_DELETE_ANY)
+
+    if not ((is_owner and can_delete_own) or can_delete_any):
+        raise HTTPException(status_code=403, detail="You are not allowed to delete this agent")
     
     await db.delete(agent)
     await db.commit()

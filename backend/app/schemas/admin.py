@@ -58,3 +58,50 @@ class AdminCreateUserRequest(BaseModel):
 
 class AdminResetPasswordRequest(BaseModel):
     temporary_password: str
+
+
+class PermissionSummary(BaseModel):
+    code: str
+    description: Optional[str] = None
+
+
+class RoleSummary(BaseModel):
+    id: UUID
+    name: str
+    description: Optional[str] = None
+    is_system: bool
+    permissions: List[str]
+
+
+class GroupSummary(BaseModel):
+    id: UUID
+    name: str
+    description: Optional[str] = None
+    is_system: bool
+    member_count: int
+
+
+class GroupCreateRequest(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+
+class GroupDetail(GroupSummary):
+    members: List[AdminManagedUser]
+
+
+class ServiceAccountSummary(BaseModel):
+    id: UUID
+    name: str
+    description: Optional[str] = None
+    is_active: bool
+
+
+class ServiceAccountCreateRequest(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+
+class ServiceAccountTokenResponse(BaseModel):
+    service_id: UUID
+    token: str
