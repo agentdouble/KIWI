@@ -12,6 +12,13 @@ FoyerGPT est une plateforme moderne de chat IA qui permet aux utilisateurs de cr
 - Gestion des sessions avec expiration automatique
 - Avatar utilisateur personnalisable
 
+### Gestion des droits (RBAC)
+- Modèle de rôles et permissions global (RBAC) : `admin`, `builder`, `viewer`
+- Rôles par défaut initialisés au démarrage, avec attribution automatique du rôle `builder` à tous les utilisateurs créés
+- Gestion fine des droits sur les agents : création, mise à jour/suppression de ses propres agents, ou de tous les agents pour les admins
+- Groupes d’utilisateurs avec héritage de rôles (attribution de rôles à un groupe, appliqués à tous ses membres)
+- Comptes services avec tokens API dédiés, gérés via l’API admin pour les intégrations externes
+
 ### Agents IA personnalisables
 - Création d'agents IA avec des prompts système personnalisés
 - Configuration des capacités d'apprentissage
@@ -250,6 +257,8 @@ uv run pytest
 cd frontend
 npm test
 ```
+
+> Remarque : certains tests liés aux intégrations MCP/PowerPoint nécessitent des modules supplémentaires (par exemple `src.converter` ou des clients MCP spécifiques). Pour vérifier uniquement le cœur de la gestion des droits, vous pouvez lancer : `uv run pytest tests/test_rbac_service.py`.
 
 > Les instantanés d’accessibilité générés localement (`.snap_*.json`) sont ignorés et peuvent être supprimés sans risque.
 
