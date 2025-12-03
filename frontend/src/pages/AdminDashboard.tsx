@@ -7,7 +7,14 @@ import { useToast } from '@/providers/ToastProvider'
 import { adminService } from '@/lib/api/services/admin.service'
 import { alertService } from '@/lib/api/services/alert.service'
 import { featureUpdatesService } from '@/lib/api/services/featureUpdates.service'
-import type { AdminDashboardResponse, AdminManagedUser, SystemAlert, FeatureUpdates, FeatureUpdateSection } from '@/types/api'
+import type {
+  AdminDashboardResponse,
+  AdminManagedUser,
+  FeatureUpdateSection,
+  FeatureUpdates,
+  RoleSummary,
+  SystemAlert,
+} from '@/types/api'
 import {
   Activity,
   BarChart2,
@@ -20,6 +27,7 @@ import {
   Plus,
   KeyRound,
   UserPlus,
+  ShieldCheck,
 } from 'lucide-react'
 
 const formatHour = (isoDate: string) => {
@@ -67,6 +75,34 @@ const UserManagementTab = ({ isActive }: UserManagementTabProps) => {
   const [isResetting, setIsResetting] = useState(false)
   const { showToast } = useToast()
 
+  const [roles, setRoles] = useState<RoleSummary[]>([])
+  const [userRoles, setUserRoles] = useState<Record<string, RoleSummary[]>>({})
+  const [isLoadingRoles, setIsLoadingRoles] = useState(false)
+
+  const fetchRolesForUsers = useCallback(async (userList: AdminManagedUser[]) => {
+    try {
+      setIsLoadingRoles(true)
+      const allRoles = await adminService.getRoles()
+      setRoles(allRoles)
+
+      const perUser: Record<string, RoleSummary[]> = {}
+      await Promise.all(
+        userList.map(async (user) => {
+          try {
+            perUser[user.id] = await adminService.getUserRoles(user.id)
+          } catch {
+            perUser[user.id] = []
+          }
+        })
+      )
+      setUserRoles(perUser)
+    } catch {
+      // Erreurs silencieuses ici, déjà remontées via error global si besoin
+    } finally {
+      setIsLoadingRoles(false)
+    }
+  }, [])
+
   const fetchUsers = useCallback(async () => {
     try {
       setIsLoading(true)
@@ -74,12 +110,17 @@ const UserManagementTab = ({ isActive }: UserManagementTabProps) => {
       const data = await adminService.getUsers()
       setUsers(data)
       setResetForm(prev => ({ ...prev, userId: prev.userId || (data[0]?.id ?? '') }))
+      if (data.length > 0) {
+        void fetchRolesForUsers(data)
+      } else {
+        setUserRoles({})
+      }
     } catch {
       setError("Impossible de récupérer les utilisateurs. Veuillez réessayer plus tard.")
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [fetchRolesForUsers])
 
   useEffect(() => {
     if (isActive) {
@@ -177,6 +218,41 @@ const UserManagementTab = ({ isActive }: UserManagementTabProps) => {
     }
   }
 
+  const handleAssignRole = async (userId: string, roleName: string) => {
+    if (!roleName) return
+    try {
+      const role = await adminService.assignRoleToUser(userId, roleName)
+      setUserRoles(prev => {
+        const current = prev[userId] ?? []
+        const exists = current.some(r => r.id === role.id)
+        if (exists) return prev
+        return {
+          ...prev,
+          [userId]: [...current, role].sort((a, b) => a.name.localeCompare(b.name)),
+        }
+      })
+      showToast(`Rôle ${roleName} attribué.`)
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || "Impossible d'attribuer le rôle.")
+    }
+  }
+
+  const handleRemoveRole = async (userId: string, roleName: string) => {
+    try {
+      await adminService.removeRoleFromUser(userId, roleName)
+      setUserRoles(prev => {
+        const current = prev[userId] ?? []
+        return {
+          ...prev,
+          [userId]: current.filter(r => r.name !== roleName),
+        }
+      })
+      showToast(`Rôle ${roleName} retiré.`)
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || "Impossible de retirer le rôle.")
+    }
+  }
+
   const renderContent = () => {
     if (isLoading) {
       return (
@@ -204,6 +280,7 @@ const UserManagementTab = ({ isActive }: UserManagementTabProps) => {
               <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Créé le</th>
               <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Accès</th>
               <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Mot de passe</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Rôles</th>
               <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Actions</th>
             </tr>
           </thead>
@@ -238,6 +315,40 @@ const UserManagementTab = ({ isActive }: UserManagementTabProps) => {
                             ? `Mis à jour le ${formatDate(user.password_changed_at)}`
                             : 'Dernière mise à jour inconnue'}
                       </span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap items-center gap-1">
+                      {(userRoles[user.id] ?? []).map(role => (
+                        <button
+                          key={role.id}
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded-full border border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/40 px-2.5 py-0.5 text-xs text-blue-700 dark:text-blue-200"
+                          onClick={() => void handleRemoveRole(user.id, role.name)}
+                          disabled={isLoadingRoles}
+                          title="Cliquez pour retirer ce rôle"
+                        >
+                          <ShieldCheck className="w-3 h-3" />
+                          <span>{role.name}</span>
+                        </button>
+                      ))}
+                      <select
+                        className="text-xs rounded-full border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 py-0.5 text-gray-700 dark:text-gray-200"
+                        disabled={isLoadingRoles || roles.length === 0}
+                        value=""
+                        onChange={(e) => {
+                          const value = e.target.value
+                          if (!value) return
+                          void handleAssignRole(user.id, value)
+                        }}
+                      >
+                        <option value="">+ Rôle</option>
+                        {roles.map(role => (
+                          <option key={role.id} value={role.name}>
+                            {role.name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </td>
                   <td className="px-4 py-3">

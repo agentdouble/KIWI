@@ -171,6 +171,53 @@ export interface AdminResetPasswordRequest {
   temporary_password: string
 }
 
+export interface PermissionSummary {
+  code: string
+  description?: string | null
+}
+
+export interface RoleSummary {
+  id: string
+  name: string
+  description?: string | null
+  is_system: boolean
+  permissions: string[]
+}
+
+export interface GroupSummary {
+  id: string
+  name: string
+  description?: string | null
+  is_system: boolean
+  member_count: number
+}
+
+export interface GroupDetail extends GroupSummary {
+  members: AdminManagedUser[]
+}
+
+export interface GroupCreateRequest {
+  name: string
+  description?: string | null
+}
+
+export interface ServiceAccountSummary {
+  id: string
+  name: string
+  description?: string | null
+  is_active: boolean
+}
+
+export interface ServiceAccountCreateRequest {
+  name: string
+  description?: string | null
+}
+
+export interface ServiceAccountTokenResponse {
+  service_id: string
+  token: string
+}
+
 // System alert
 export interface SystemAlert {
   message: string
