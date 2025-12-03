@@ -76,19 +76,18 @@ async def get_agents(
                 or_(
                     Agent.user_id == current_user.id,
                     Agent.is_public == True,
-                    Agent.is_default == True
                 )
-            ).options(selectinload(Agent.user)).order_by(Agent.created_at.desc())
+            )
+            .options(selectinload(Agent.user))
+            .order_by(Agent.created_at.desc())
         )
     else:
-        # User non connecté : voir seulement les agents publics et par défaut
+        # User non connecté : voir seulement les agents publics
         result = await db.execute(
-            select(Agent).where(
-                or_(
-                    Agent.is_public == True,
-                    Agent.is_default == True
-                )
-            ).options(selectinload(Agent.user)).order_by(Agent.created_at.desc())
+            select(Agent)
+            .where(Agent.is_public == True)
+            .options(selectinload(Agent.user))
+            .order_by(Agent.created_at.desc())
         )
     
     agents = result.scalars().all()
@@ -103,15 +102,24 @@ async def get_default_agents(
     current_user: Optional[User] = Depends(get_optional_current_user)
 ):
     """Récupérer les agents par défaut"""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
     favorite_agent_ids: set[uuid.UUID] = set()
-    if current_user:
-        favorite_result = await db.execute(
-            select(AgentFavorite.agent_id).where(AgentFavorite.user_id == current_user.id)
-        )
-        favorite_agent_ids = {row for row in favorite_result.scalars()}
+    favorite_result = await db.execute(
+        select(AgentFavorite.agent_id).where(AgentFavorite.user_id == current_user.id)
+    )
+    favorite_agent_ids = {row for row in favorite_result.scalars()}
 
     result = await db.execute(
-        select(Agent).where(Agent.is_default == True).options(selectinload(Agent.user))
+        select(Agent)
+        .where(
+            and_(
+                Agent.is_default == True,
+                Agent.user_id == current_user.id,
+            )
+        )
+        .options(selectinload(Agent.user))
     )
     agents = result.scalars().all()
     
@@ -271,7 +279,7 @@ async def get_agent(
     # Vérifier les permissions
     is_admin = bool(current_user and current_user.is_admin)
 
-    if not agent.is_public and not agent.is_default:
+    if not agent.is_public:
         if not current_user or (agent.user_id != current_user.id and not is_admin):
             raise HTTPException(status_code=403, detail="Access denied")
     
@@ -353,7 +361,9 @@ async def favorite_agent(
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
 
-    if not agent.is_public and not agent.is_default and agent.user_id != current_user.id:
+    is_admin = bool(current_user and current_user.is_admin)
+
+    if not agent.is_public and agent.user_id != current_user.id and not is_admin:
         raise HTTPException(status_code=403, detail="Access denied")
 
     existing_favorite = await db.execute(

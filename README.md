@@ -15,9 +15,41 @@ FoyerGPT est une plateforme moderne de chat IA qui permet aux utilisateurs de cr
 ### Gestion des droits (RBAC)
 - Modèle de rôles et permissions global (RBAC) : `admin`, `builder`, `viewer`
 - Rôles par défaut initialisés au démarrage, avec attribution automatique du rôle `builder` à tous les utilisateurs créés
-- Gestion fine des droits sur les agents : création, mise à jour/suppression de ses propres agents, ou de tous les agents pour les admins
+- Gestion fine des droits sur :
+  - les **agents** : création, mise à jour/suppression de ses propres agents, ou de tous les agents pour les admins
+  - les **chats** : création, consultation et archivage de ses propres conversations
+  - les **messages** : envoi, édition de ses propres messages et feedback (👍/👎) sur les réponses de l'assistant
 - Groupes d’utilisateurs avec héritage de rôles (attribution de rôles à un groupe, appliqués à tous ses membres)
 - Comptes services avec tokens API dédiés, gérés via l’API admin pour les intégrations externes
+
+#### Détail des principales permissions
+
+Les permissions sont stockées en base (table `permissions`) et associées aux rôles (`roles`) via des liens (`role_permissions`). Quelques exemples :
+
+- Agents :
+  - `agent:create` : créer des agents
+  - `agent:update:own` / `agent:delete:own` : gérer ses propres agents
+  - `agent:update:any` / `agent:delete:any` : gérer tous les agents
+- Chats :
+  - `chat:create` : créer des chats
+  - `chat:read:own` : lister et lire ses propres chats
+  - `chat:delete:own` : archiver/supprimer ses propres chats
+- Messages :
+  - `message:send` : envoyer des messages (inclut le streaming)
+  - `message:edit:own` : modifier ses propres messages utilisateur
+  - `message:feedback` : donner un feedback sur les messages de l'assistant
+
+Par défaut :
+- `admin` possède toutes ces permissions (plus les permissions d'administration : gestion utilisateurs, rôles, groupes, comptes service, etc.)
+- `builder` possède les permissions d'édition d'agents et l'ensemble des permissions de chat/messages pour utiliser la plateforme
+- `viewer` possède les permissions de chat/messages uniquement (usage de la plateforme sans création/édition d'agents)
+
+Les administrateurs disposant de la permission `rbac:manage_roles` peuvent :
+- créer des rôles personnalisés (API `POST /api/admin/roles`) en sélectionnant les permissions souhaitées,
+- modifier la description et les droits associés à un rôle existant (API `PATCH /api/admin/roles/{role_id}`),
+- supprimer un rôle non système (API `DELETE /api/admin/roles/{role_id}`).
+
+L'onglet **« Rôles & droits »** du tableau de bord admin expose ces informations et permet, pour chaque rôle, de cocher/décocher les permissions par famille (agents, chats, messages, administration, RBAC) afin d'adapter finement les droits sans toucher au code.
 
 ### Agents IA personnalisables
 - Création d'agents IA avec des prompts système personnalisés
@@ -25,6 +57,7 @@ FoyerGPT est une plateforme moderne de chat IA qui permet aux utilisateurs de cr
 - Support multimodal (texte et documents)
 - Marketplace d'agents publics
 - Gestion des agents privés par utilisateur
+- Assistants par défaut propres à chaque utilisateur, non visibles dans le marketplace des autres comptes
 
 ### Interface de chat avancée
 - Conversations en temps réel avec streaming des réponses
