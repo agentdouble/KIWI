@@ -169,7 +169,7 @@ npm run dev
 - La création et la suppression des comptes se font depuis l'onglet **Utilisateurs** du tableau de bord administrateur.
 - Les administrateurs définissent un mot de passe temporaire ; l'utilisateur est automatiquement redirigé vers l'écran de changement de mot de passe lors de sa première connexion.
 - Tant que le mot de passe n'est pas changé, l'accès aux autres API est bloqué (seules `/api/auth/me` et `/api/auth/change-password` restent accessibles).
-- Pendant que l'assistant répond, vous pouvez continuer à saisir le prochain message : il sera envoyé dès que la réponse en cours sera terminée et le bouton d'envoi affiche un indicateur carré pour signaler qu'une réponse est en cours.
+- Pendant que l'assistant répond, vous pouvez continuer à saisir le prochain message : il sera envoyé dès que la réponse en cours sera terminée, le bouton d'envoi affiche un indicateur carré pour signaler qu'une réponse est en cours, et vous pouvez faire défiler l'historique sans être automatiquement ramené en bas.
 
 ### Initialiser un compte admin
 
