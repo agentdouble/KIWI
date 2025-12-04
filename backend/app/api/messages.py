@@ -15,6 +15,12 @@ from app.services.feedback_service import FeedbackService
 from app.utils.auth import get_current_active_user
 from app.utils.rate_limit import limiter, AI_RATE_LIMIT
 from app.utils.cache import cache_service
+from app.services.rbac_service import (
+    PERM_MESSAGE_SEND,
+    PERM_MESSAGE_EDIT_OWN,
+    PERM_MESSAGE_FEEDBACK,
+    user_has_permission,
+)
 from app.models.user import User
 from app.models.chat import Chat
 from typing import Optional
@@ -82,6 +88,8 @@ async def send_message(
     lock_token: Optional[str] = None
 
     try:
+        if not await user_has_permission(db, current_user, PERM_MESSAGE_SEND):
+            raise HTTPException(status_code=403, detail="You are not allowed to send messages")
         lock_token = await cache_service.acquire_lock(lock_key, ttl_seconds=300)
         if lock_token is None:
             logger.warning("Concurrent send_message detected for chat %s", message_request.chat_id)
@@ -190,6 +198,8 @@ async def edit_message(
         raise HTTPException(status_code=400, detail="Seuls les messages utilisateur peuvent être modifiés")
 
     chat_id = str(message.chat_id)
+    if not await user_has_permission(db, current_user, PERM_MESSAGE_EDIT_OWN):
+        raise HTTPException(status_code=403, detail="You are not allowed to edit messages")
     if not await service.validate_chat_user(chat_id, current_user.id):
         raise HTTPException(status_code=403, detail="Chat non autorisé")
 
@@ -228,6 +238,8 @@ async def stream_message(
         tool_calls: list[str] | None = None
 
         try:
+            if not await user_has_permission(db, current_user, PERM_MESSAGE_SEND):
+                raise HTTPException(status_code=403, detail="You are not allowed to send messages")
             nonlocal lock_token
 
             lock_token = await cache_service.acquire_lock(lock_key, ttl_seconds=300)
@@ -317,6 +329,9 @@ async def set_message_feedback(
     current_user: User = Depends(get_current_active_user)
 ):
     service = FeedbackService(db)
+    if not await user_has_permission(db, current_user, PERM_MESSAGE_FEEDBACK):
+        raise HTTPException(status_code=403, detail="You are not allowed to set message feedback")
+
     feedback_entry = await service.set_feedback(
         message_id=message_id,
         user_id=current_user.id,

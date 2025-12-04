@@ -114,10 +114,25 @@ def is_user_admin(user) -> bool:
     return bool(getattr(user, "is_admin", False))
 
 
-async def get_current_admin_user(current_user = Depends(get_current_active_user)):
-    if not is_user_admin(current_user):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
-    return current_user
+async def get_current_admin_user(
+    current_user = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if is_user_admin(current_user):
+        return current_user
+
+    from app.services.rbac_service import (
+        PERM_ADMIN_USERS_MANAGE,
+        user_has_permission,
+    )
+
+    if await user_has_permission(db, current_user, PERM_ADMIN_USERS_MANAGE):
+        return current_user
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Admin access required",
+    )
 
 
 def verify_token(token: str) -> Optional[dict]:

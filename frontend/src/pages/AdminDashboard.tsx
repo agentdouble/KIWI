@@ -7,7 +7,24 @@ import { useToast } from '@/providers/ToastProvider'
 import { adminService } from '@/lib/api/services/admin.service'
 import { alertService } from '@/lib/api/services/alert.service'
 import { featureUpdatesService } from '@/lib/api/services/featureUpdates.service'
-import type { AdminDashboardResponse, AdminManagedUser, SystemAlert, FeatureUpdates, FeatureUpdateSection } from '@/types/api'
+import type {
+  AdminDashboardResponse,
+  AdminFeedbackEntry,
+  AdminManagedUser,
+  ChatResponse,
+  FeatureUpdateSection,
+  FeatureUpdates,
+  PermissionSummary,
+  RoleSummary,
+  SystemAlert,
+} from '@/types/api'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   Activity,
   BarChart2,
@@ -20,7 +37,12 @@ import {
   Plus,
   KeyRound,
   UserPlus,
+  ShieldCheck,
+  ThumbsDown,
+  ThumbsUp,
 } from 'lucide-react'
+
+type AdminTabKey = 'stats' | 'users' | 'feedback' | 'alert' | 'updates' | 'rbac'
 
 const formatHour = (isoDate: string) => {
   const date = new Date(isoDate)
@@ -52,6 +74,285 @@ const formatDate = (isoDate: string | null) => {
   })
 }
 
+type FeedbackFilter = 'down' | 'up' | 'all'
+
+type FeedbackManagementTabProps = {
+  isActive: boolean
+}
+
+const FeedbackManagementTab = ({ isActive }: FeedbackManagementTabProps) => {
+  const { showToast } = useToast()
+  const [feedbacks, setFeedbacks] = useState<AdminFeedbackEntry[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [filter, setFilter] = useState<FeedbackFilter>('down')
+  const [selectedFeedback, setSelectedFeedback] = useState<AdminFeedbackEntry | null>(null)
+  const [selectedChat, setSelectedChat] = useState<ChatResponse | null>(null)
+  const [isChatLoading, setIsChatLoading] = useState(false)
+
+  const loadFeedbacks = useCallback(async () => {
+    if (!isActive) return
+    try {
+      setIsLoading(true)
+      setError(null)
+      const params = filter === 'all' ? undefined : { feedback_type: filter }
+      const data = await adminService.getFeedback(params)
+      setFeedbacks(data)
+    } catch {
+      setError("Impossible de récupérer les feedbacks.")
+    } finally {
+      setIsLoading(false)
+    }
+  }, [filter, isActive])
+
+  useEffect(() => {
+    void loadFeedbacks()
+  }, [loadFeedbacks])
+
+  const handleOpenChat = async (feedback: AdminFeedbackEntry) => {
+    setSelectedFeedback(feedback)
+    setSelectedChat(null)
+    setIsChatLoading(true)
+    try {
+      const chat = await adminService.getFeedbackChat(feedback.id)
+      setSelectedChat(chat)
+    } catch {
+      showToast("Impossible de charger la conversation.")
+    } finally {
+      setIsChatLoading(false)
+    }
+  }
+
+  const handleCloseDialog = (open: boolean) => {
+    if (!open) {
+      setSelectedFeedback(null)
+      setSelectedChat(null)
+    }
+  }
+
+  const renderContent = () => {
+    if (isLoading) {
+      return (
+        <div className="flex justify-center py-12">
+          <Loader2 className="w-6 h-6 text-blue-600 dark:text-blue-300 animate-spin" />
+        </div>
+      )
+    }
+
+    if (feedbacks.length === 0) {
+      return (
+        <div className="text-sm text-gray-500 dark:text-gray-400 text-center py-12 border border-dashed border-gray-200 dark:border-gray-700 rounded-lg">
+          Aucun feedback pour le moment sur les réponses de l'assistant.
+        </div>
+      )
+    }
+
+    return (
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
+          <thead className="bg-gray-100 dark:bg-gray-900/50">
+            <tr>
+              <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Date</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Type</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Utilisateur</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Agent</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Extrait du message</th>
+              <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Conversation</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+            {feedbacks.map(entry => {
+              const date = new Date(entry.created_at).toLocaleString('fr-FR')
+              const isNegative = entry.feedback_type === 'down'
+              return (
+                <tr key={entry.id} className="bg-white dark:bg-gray-900/60">
+                  <td className="px-4 py-3 text-gray-700 dark:text-gray-300 whitespace-nowrap">{date}</td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${
+                        isNegative
+                          ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                          : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+                      }`}
+                    >
+                      {isNegative ? (
+                        <>
+                          <ThumbsDown className="w-3 h-3" />
+                          <span>Négatif</span>
+                        </>
+                      ) : (
+                        <>
+                          <ThumbsUp className="w-3 h-3" />
+                          <span>Positif</span>
+                        </>
+                      )}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
+                    <div className="flex flex-col">
+                      <span className="font-medium text-gray-900 dark:text-white">
+                        {entry.user_trigramme || 'Utilisateur'}
+                      </span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        {entry.user_email || 'Email non renseigné'}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
+                    <div className="flex flex-col">
+                      <span className="font-medium text-gray-900 dark:text-white">
+                        {entry.agent_name || 'Agent inconnu'}
+                      </span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        {entry.chat_title || 'Chat sans titre'}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-gray-700 dark:text-gray-300 max-w-xs">
+                    <span className="line-clamp-2">{entry.message_content}</span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void handleOpenChat(entry)}
+                      className="inline-flex items-center gap-2"
+                    >
+                      Voir la conversation
+                    </Button>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+
+  const currentFeedbackLabel =
+    selectedFeedback?.feedback_type === 'down' ? 'Feedback négatif' : 'Feedback positif'
+
+  return (
+    <>
+      <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-800 rounded-xl p-6 space-y-6">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Feedbacks sur les réponses IA</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Visualisez les messages ayant reçu un pouce en bas ou en haut, et ouvrez la conversation associée pour comprendre le contexte.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant={filter === 'down' ? 'default' : 'outline'}
+              onClick={() => setFilter('down')}
+            >
+              Négatifs
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={filter === 'up' ? 'default' : 'outline'}
+              onClick={() => setFilter('up')}
+            >
+              Positifs
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={filter === 'all' ? 'default' : 'outline'}
+              onClick={() => setFilter('all')}
+            >
+              Tous
+            </Button>
+          </div>
+        </div>
+
+        {error && (
+          <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded-lg px-4 py-3">
+            {error}
+          </div>
+        )}
+
+        {renderContent()}
+      </div>
+
+      <Dialog open={Boolean(selectedFeedback)} onOpenChange={handleCloseDialog}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Conversation associée au feedback</DialogTitle>
+            <DialogDescription>
+              {selectedFeedback && (
+                <>
+                  {currentFeedbackLabel} de {selectedFeedback.user_trigramme || 'utilisateur'} sur l&apos;agent{' '}
+                  {selectedFeedback.agent_name || 'inconnu'}.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          {isChatLoading && (
+            <div className="flex justify-center py-8">
+              <Loader2 className="w-5 h-5 text-blue-600 dark:text-blue-300 animate-spin" />
+            </div>
+          )}
+
+          {!isChatLoading && selectedChat && (
+            <div className="mt-4 max-h-[60vh] overflow-y-auto space-y-3">
+              {selectedChat.messages.map(message => {
+                const isUser = message.role === 'user'
+                const createdAt = new Date(message.created_at).toLocaleString('fr-FR')
+                const isTarget = selectedFeedback && message.id === selectedFeedback.message_id
+                return (
+                  <div
+                    key={message.id}
+                    className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div
+                      className={`max-w-[80%] rounded-lg px-3 py-2 text-sm shadow-sm ${
+                        isUser
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100'
+                      } ${isTarget ? 'ring-2 ring-offset-2 ring-blue-500 dark:ring-offset-gray-900' : ''}`}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="text-xs font-semibold">
+                          {isUser ? 'Utilisateur' : 'Assistant'}
+                        </span>
+                        <span className="text-[10px] opacity-80">{createdAt}</span>
+                      </div>
+                      <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                      {isTarget && selectedFeedback && (
+                        <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-medium text-gray-800 dark:bg-gray-800/80 dark:text-gray-100">
+                          {selectedFeedback.feedback_type === 'down' ? (
+                            <>
+                              <ThumbsDown className="w-3 h-3 text-red-600" />
+                              <span>Feedback négatif</span>
+                            </>
+                          ) : (
+                            <>
+                              <ThumbsUp className="w-3 h-3 text-green-600" />
+                              <span>Feedback positif</span>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
 type UserManagementTabProps = {
   isActive: boolean
 }
@@ -67,6 +368,34 @@ const UserManagementTab = ({ isActive }: UserManagementTabProps) => {
   const [isResetting, setIsResetting] = useState(false)
   const { showToast } = useToast()
 
+  const [roles, setRoles] = useState<RoleSummary[]>([])
+  const [userRoles, setUserRoles] = useState<Record<string, RoleSummary[]>>({})
+  const [isLoadingRoles, setIsLoadingRoles] = useState(false)
+
+  const fetchRolesForUsers = useCallback(async (userList: AdminManagedUser[]) => {
+    try {
+      setIsLoadingRoles(true)
+      const allRoles = await adminService.getRoles()
+      setRoles(allRoles)
+
+      const perUser: Record<string, RoleSummary[]> = {}
+      await Promise.all(
+        userList.map(async (user) => {
+          try {
+            perUser[user.id] = await adminService.getUserRoles(user.id)
+          } catch {
+            perUser[user.id] = []
+          }
+        })
+      )
+      setUserRoles(perUser)
+    } catch {
+      // Erreurs silencieuses ici, déjà remontées via error global si besoin
+    } finally {
+      setIsLoadingRoles(false)
+    }
+  }, [])
+
   const fetchUsers = useCallback(async () => {
     try {
       setIsLoading(true)
@@ -74,12 +403,17 @@ const UserManagementTab = ({ isActive }: UserManagementTabProps) => {
       const data = await adminService.getUsers()
       setUsers(data)
       setResetForm(prev => ({ ...prev, userId: prev.userId || (data[0]?.id ?? '') }))
+      if (data.length > 0) {
+        void fetchRolesForUsers(data)
+      } else {
+        setUserRoles({})
+      }
     } catch {
       setError("Impossible de récupérer les utilisateurs. Veuillez réessayer plus tard.")
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [fetchRolesForUsers])
 
   useEffect(() => {
     if (isActive) {
@@ -177,6 +511,41 @@ const UserManagementTab = ({ isActive }: UserManagementTabProps) => {
     }
   }
 
+  const handleAssignRole = async (userId: string, roleName: string) => {
+    if (!roleName) return
+    try {
+      const role = await adminService.assignRoleToUser(userId, roleName)
+      setUserRoles(prev => {
+        const current = prev[userId] ?? []
+        const exists = current.some(r => r.id === role.id)
+        if (exists) return prev
+        return {
+          ...prev,
+          [userId]: [...current, role].sort((a, b) => a.name.localeCompare(b.name)),
+        }
+      })
+      showToast(`Rôle ${roleName} attribué.`)
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || "Impossible d'attribuer le rôle.")
+    }
+  }
+
+  const handleRemoveRole = async (userId: string, roleName: string) => {
+    try {
+      await adminService.removeRoleFromUser(userId, roleName)
+      setUserRoles(prev => {
+        const current = prev[userId] ?? []
+        return {
+          ...prev,
+          [userId]: current.filter(r => r.name !== roleName),
+        }
+      })
+      showToast(`Rôle ${roleName} retiré.`)
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || "Impossible de retirer le rôle.")
+    }
+  }
+
   const renderContent = () => {
     if (isLoading) {
       return (
@@ -204,6 +573,7 @@ const UserManagementTab = ({ isActive }: UserManagementTabProps) => {
               <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Créé le</th>
               <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Accès</th>
               <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Mot de passe</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Rôles</th>
               <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Actions</th>
             </tr>
           </thead>
@@ -238,6 +608,40 @@ const UserManagementTab = ({ isActive }: UserManagementTabProps) => {
                             ? `Mis à jour le ${formatDate(user.password_changed_at)}`
                             : 'Dernière mise à jour inconnue'}
                       </span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap items-center gap-1">
+                      {(userRoles[user.id] ?? []).map(role => (
+                        <button
+                          key={role.id}
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded-full border border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/40 px-2.5 py-0.5 text-xs text-blue-700 dark:text-blue-200"
+                          onClick={() => void handleRemoveRole(user.id, role.name)}
+                          disabled={isLoadingRoles}
+                          title="Cliquez pour retirer ce rôle"
+                        >
+                          <ShieldCheck className="w-3 h-3" />
+                          <span>{role.name}</span>
+                        </button>
+                      ))}
+                      <select
+                        className="text-xs rounded-full border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 py-0.5 text-gray-700 dark:text-gray-200"
+                        disabled={isLoadingRoles || roles.length === 0}
+                        value=""
+                        onChange={(e) => {
+                          const value = e.target.value
+                          if (!value) return
+                          void handleAssignRole(user.id, value)
+                        }}
+                      >
+                        <option value="">+ Rôle</option>
+                        {roles.map(role => (
+                          <option key={role.id} value={role.name}>
+                            {role.name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </td>
                   <td className="px-4 py-3">
@@ -422,6 +826,394 @@ const UserManagementTab = ({ isActive }: UserManagementTabProps) => {
   )
 }
 
+type RbacManagementTabProps = {
+  isActive: boolean
+}
+
+const RbacManagementTab = ({ isActive }: RbacManagementTabProps) => {
+  const [permissions, setPermissions] = useState<PermissionSummary[]>([])
+  const [roles, setRoles] = useState<RoleSummary[]>([])
+  const [selectedRoleName, setSelectedRoleName] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [isSavingRole, setIsSavingRole] = useState(false)
+  const [isCreatingRole, setIsCreatingRole] = useState(false)
+  const [newRoleName, setNewRoleName] = useState('')
+  const [newRoleDescription, setNewRoleDescription] = useState('')
+  const [newRolePermissions, setNewRolePermissions] = useState<Set<string>>(new Set())
+  const [editedRoleDescription, setEditedRoleDescription] = useState<string>('')
+  const [editedRolePermissions, setEditedRolePermissions] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    if (!isActive) return
+
+    let mounted = true
+    const fetchRbac = async () => {
+      try {
+        setIsLoading(true)
+        setError(null)
+        const [perms, roleSummaries] = await Promise.all([
+          adminService.getPermissions(),
+          adminService.getRoles(),
+        ])
+        if (!mounted) return
+        setPermissions(perms)
+        setRoles(roleSummaries)
+        if (!selectedRoleName && roleSummaries.length > 0) {
+          const initial = roleSummaries[0]
+          setSelectedRoleName(initial.name)
+          setEditedRoleDescription(initial.description ?? '')
+          setEditedRolePermissions(new Set(initial.permissions))
+        } else if (selectedRoleName) {
+          const current = roleSummaries.find((r) => r.name === selectedRoleName)
+          if (current) {
+            setEditedRoleDescription(current.description ?? '')
+            setEditedRolePermissions(new Set(current.permissions))
+          }
+        }
+      } catch {
+        if (!mounted) return
+        setError("Impossible de récupérer les rôles et permissions.")
+      } finally {
+        if (!mounted) return
+        setIsLoading(false)
+      }
+    }
+
+    void fetchRbac()
+    return () => {
+      mounted = false
+    }
+  }, [isActive, selectedRoleName])
+
+  const permissionsByCode = useMemo(() => {
+    const map: Record<string, PermissionSummary> = {}
+    for (const perm of permissions) {
+      map[perm.code] = perm
+    }
+    return map
+  }, [permissions])
+
+  const selectedRole = useMemo(
+    () => roles.find((role) => role.name === selectedRoleName) ?? null,
+    [roles, selectedRoleName]
+  )
+
+  const groupedPermissions = useMemo(() => {
+    const groups: Record<string, PermissionSummary[]> = {
+      Agents: [],
+      Chats: [],
+      Messages: [],
+      Administration: [],
+      RBAC: [],
+      Autres: [],
+    }
+    for (const perm of permissions) {
+      if (perm.code.startsWith('agent:')) {
+        groups.Agents.push(perm)
+      } else if (perm.code.startsWith('chat:')) {
+        groups.Chats.push(perm)
+      } else if (perm.code.startsWith('message:')) {
+        groups.Messages.push(perm)
+      } else if (perm.code.startsWith('admin:')) {
+        groups.Administration.push(perm)
+      } else if (perm.code.startsWith('rbac:')) {
+        groups.RBAC.push(perm)
+      } else {
+        groups.Autres.push(perm)
+      }
+    }
+    return groups
+  }, [permissions])
+
+  const togglePermission = (set: Set<string>, code: string): Set<string> => {
+    const next = new Set(set)
+    if (next.has(code)) {
+      next.delete(code)
+    } else {
+      next.add(code)
+    }
+    return next
+  }
+
+  const handleSaveSelectedRole = async () => {
+    if (!selectedRole) return
+    try {
+      setIsSavingRole(true)
+      const updated = await adminService.updateRole(selectedRole.id, {
+        description: editedRoleDescription,
+        permissions: Array.from(editedRolePermissions),
+      })
+      setRoles((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
+      setEditedRoleDescription(updated.description ?? '')
+      setEditedRolePermissions(new Set(updated.permissions))
+      setError(null)
+    } catch {
+      setError("Impossible d'enregistrer les modifications du rôle.")
+    } finally {
+      setIsSavingRole(false)
+    }
+  }
+
+  const handleCreateRole = async () => {
+    if (!newRoleName.trim()) {
+      setError("Le nom du nouveau rôle est obligatoire.")
+      return
+    }
+    try {
+      setIsCreatingRole(true)
+      const created = await adminService.createRole({
+        name: newRoleName.trim(),
+        description: newRoleDescription.trim() || undefined,
+        permissions: Array.from(newRolePermissions),
+      })
+      setRoles((prev) => [...prev, created])
+      setSelectedRoleName(created.name)
+      setEditedRoleDescription(created.description ?? '')
+      setEditedRolePermissions(new Set(created.permissions))
+      setNewRoleName('')
+      setNewRoleDescription('')
+      setNewRolePermissions(new Set())
+      setError(null)
+    } catch {
+      setError("Impossible de créer le rôle.")
+    } finally {
+      setIsCreatingRole(false)
+    }
+  }
+
+  return (
+    <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-800 rounded-xl p-6 space-y-6">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Rôles & droits</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Visualisez les permissions attachées à chaque rôle pour comprendre qui peut créer des agents, chatter, envoyer des
+            messages, etc.
+          </p>
+        </div>
+      </div>
+
+      {error && (
+        <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded-lg px-4 py-3">
+          {error}
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="flex justify-center py-12">
+          <Loader2 className="w-6 h-6 text-blue-600 dark:text-blue-300 animate-spin" />
+        </div>
+      ) : (
+        <div className="grid gap-6 md:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
+          <div className="space-y-3">
+            <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Rôles</h4>
+            <div className="flex flex-col gap-2">
+              {roles.map((role) => {
+                const isSelected = role.name === selectedRoleName
+                return (
+                  <button
+                    key={role.id}
+                    type="button"
+                    className={`flex items-center justify-between rounded-lg border px-3 py-2 text-sm transition-colors ${
+                      isSelected
+                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/40 text-blue-800 dark:text-blue-100'
+                        : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100'
+                    }`}
+                    onClick={() => setSelectedRoleName(role.name)}
+                  >
+                    <span className="flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4" />
+                      <span className="font-medium">{role.name}</span>
+                    </span>
+                    {role.is_system && (
+                      <span className="rounded-full bg-gray-100 dark:bg-gray-800 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                        Système
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+              {roles.length === 0 && (
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Aucun rôle configuré. Les rôles par défaut sont créés automatiquement au démarrage du backend.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+              Permissions du rôle sélectionné
+            </h4>
+
+            {!selectedRole && (
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Sélectionnez un rôle dans la colonne de gauche pour voir le détail de ses permissions.
+              </p>
+            )}
+
+            {selectedRole && (
+              <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4 space-y-4">
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-blue-600 dark:text-blue-300" />
+                    <span className="text-sm font-semibold text-gray-900 dark:text-white">{selectedRole.name}</span>
+                    {selectedRole.is_system && (
+                      <span className="rounded-full bg-gray-100 dark:bg-gray-800 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                        Système
+                      </span>
+                    )}
+                  </div>
+                  <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Description</label>
+                  <input
+                    type="text"
+                    className="w-full rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 p-2 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={editedRoleDescription}
+                    onChange={(e) => setEditedRoleDescription(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  {Object.entries(groupedPermissions).map(([groupName, perms]) => {
+                    if (!perms.length) return null
+                    return (
+                      <div key={groupName} className="space-y-2">
+                        <h6 className="text-xs font-semibold text-gray-700 dark:text-gray-300">{groupName}</h6>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {perms.map((perm) => {
+                            const checked = editedRolePermissions.has(perm.code)
+                            return (
+                              <label
+                                key={perm.code}
+                                className="flex items-start gap-2 rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 px-2 py-1"
+                              >
+                                <input
+                                  type="checkbox"
+                                  className="mt-0.5 h-3 w-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  checked={checked}
+                                  onChange={() =>
+                                    setEditedRolePermissions((prev) => togglePermission(prev, perm.code))
+                                  }
+                                />
+                                <span className="flex flex-col">
+                                  <span className="font-mono text-[10px] text-blue-700 dark:text-blue-300">
+                                    {perm.code}
+                                  </span>
+                                  {perm.description && (
+                                    <span className="text-[11px] text-gray-600 dark:text-gray-400">
+                                      {perm.description}
+                                    </span>
+                                  )}
+                                </span>
+                              </label>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="default"
+                    onClick={() => void handleSaveSelectedRole()}
+                    disabled={isSavingRole}
+                    className="inline-flex items-center gap-2"
+                  >
+                    {isSavingRole ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                    Enregistrer les droits
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <div className="rounded-lg border border-dashed border-gray-300 dark:border-gray-700 bg-white/60 dark:bg-gray-900/40 p-4 space-y-3">
+              <h5 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <Plus className="w-4 h-4" />
+                Créer un nouveau rôle
+              </h5>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-1">
+                  <Label className="text-xs">Nom</Label>
+                  <Input
+                    type="text"
+                    value={newRoleName}
+                    onChange={(e) => setNewRoleName(e.target.value)}
+                    placeholder="ex: reader, manager"
+                    className="text-sm"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Description</Label>
+                  <Input
+                    type="text"
+                    value={newRoleDescription}
+                    onChange={(e) => setNewRoleDescription(e.target.value)}
+                    placeholder="Rôle personnalisé"
+                    className="text-sm"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Cochez les permissions de base pour ce rôle. Vous pourrez les ajuster ensuite comme pour les autres rôles.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                  {permissions.map((perm) => {
+                    const checked = newRolePermissions.has(perm.code)
+                    return (
+                      <label
+                        key={perm.code}
+                        className="flex items-start gap-2 rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 px-2 py-1"
+                      >
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 h-3 w-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          checked={checked}
+                          onChange={() =>
+                            setNewRolePermissions((prev) => togglePermission(prev, perm.code))
+                          }
+                        />
+                        <span className="flex flex-col">
+                          <span className="font-mono text-[10px] text-blue-700 dark:text-blue-300">
+                            {perm.code}
+                          </span>
+                          {perm.description && (
+                            <span className="text-[11px] text-gray-600 dark:text-gray-400">
+                              {perm.description}
+                            </span>
+                          )}
+                        </span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void handleCreateRole()}
+                  disabled={isCreatingRole || !newRoleName.trim()}
+                  className="inline-flex items-center gap-2"
+                >
+                  {isCreatingRole ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                  Créer le rôle
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 const AlertManagementTab = () => {
   const { showToast } = useToast()
   const [loading, setLoading] = useState<boolean>(false)
@@ -513,7 +1305,7 @@ export const AdminDashboard = () => {
   const [stats, setStats] = useState<AdminDashboardResponse | null>(null)
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'stats' | 'users' | 'alert' | 'updates'>('stats')
+  const [activeTab, setActiveTab] = useState<AdminTabKey>('stats')
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -573,14 +1365,16 @@ export const AdminDashboard = () => {
 
         <Tabs
           value={activeTab}
-          onValueChange={value => setActiveTab(value as 'stats' | 'users' | 'alert' | 'updates')}
+          onValueChange={value => setActiveTab(value as AdminTabKey)}
           className="space-y-6"
         >
-          <TabsList className="grid w-full max-w-xl grid-cols-4 md:w-auto">
+          <TabsList className="grid w-full max-w-xl grid-cols-6 md:w-auto">
             <TabsTrigger value="stats">Statistiques</TabsTrigger>
             <TabsTrigger value="users">Utilisateurs</TabsTrigger>
+            <TabsTrigger value="feedback">Feedback</TabsTrigger>
             <TabsTrigger value="alert">Alerte</TabsTrigger>
             <TabsTrigger value="updates">Nouveautés</TabsTrigger>
+            <TabsTrigger value="rbac">Rôles & droits</TabsTrigger>
           </TabsList>
 
           <TabsContent value="stats" className="space-y-8 pt-4">
@@ -772,6 +1566,14 @@ export const AdminDashboard = () => {
                 Aucune statistique disponible pour le moment.
               </div>
             )}
+          </TabsContent>
+
+          <TabsContent value="feedback" className="pt-4">
+            <FeedbackManagementTab isActive={activeTab === 'feedback'} />
+          </TabsContent>
+
+          <TabsContent value="rbac" className="pt-4">
+            <RbacManagementTab isActive={activeTab === 'rbac'} />
           </TabsContent>
 
           <TabsContent value="users" className="pt-4">

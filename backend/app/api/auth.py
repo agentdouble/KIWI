@@ -11,6 +11,7 @@ from app.schemas.auth import (
     PasswordChangeRequest,
 )
 from app.utils.auth import create_access_token, get_current_active_user, get_current_admin_user
+from app.services.rbac_service import assign_default_roles_for_user
 from app.utils.rate_limit import limiter, AUTH_RATE_LIMIT
 import logging
 
@@ -60,6 +61,9 @@ async def register(
     db.add(user)
     await db.commit()
     await db.refresh(user)
+
+    await assign_default_roles_for_user(db, user)
+    await db.commit()
     
     logger.info("Admin %s created user %s", current_admin.trigramme, user.email)
     return user

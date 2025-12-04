@@ -11,6 +11,12 @@ from app.models.agent import Agent
 from app.schemas.chat import ChatResponse, CreateChatRequest
 from app.schemas.message import MessageResponse
 from app.utils.auth import get_optional_current_user, get_current_active_user
+from app.services.rbac_service import (
+    PERM_CHAT_CREATE,
+    PERM_CHAT_READ_OWN,
+    PERM_CHAT_DELETE_OWN,
+    user_has_permission,
+)
 import uuid
 from typing import List, Optional
 from datetime import datetime
@@ -24,6 +30,8 @@ async def get_user_chats(
     current_user: User = Depends(get_current_active_user)
 ):
     """Récupérer tous les chats d'un utilisateur connecté"""
+    if not await user_has_permission(db, current_user, PERM_CHAT_READ_OWN):
+        raise HTTPException(status_code=403, detail="You are not allowed to list your chats")
     query = (
         select(Chat)
         .options(
@@ -69,6 +77,8 @@ async def create_chat(
     current_user: User = Depends(get_current_active_user)
 ):
     """Créer un nouveau chat"""
+    if not await user_has_permission(db, current_user, PERM_CHAT_CREATE):
+        raise HTTPException(status_code=403, detail="You are not allowed to create chats")
     # Gérer agent_id de manière plus robuste
     agent_id = None
     if request.agent_id and request.agent_id != "null" and request.agent_id != "undefined":
@@ -132,6 +142,8 @@ async def get_chat(
     current_user: User = Depends(get_current_active_user)
 ):
     """Récupérer un chat spécifique avec ses messages"""
+    if not await user_has_permission(db, current_user, PERM_CHAT_READ_OWN):
+        raise HTTPException(status_code=403, detail="You are not allowed to read chats")
     result = await db.execute(
         select(Chat)
         .where(Chat.id == uuid.UUID(chat_id))
@@ -176,6 +188,8 @@ async def update_chat_title(
     current_user: User = Depends(get_current_active_user)
 ):
     """Mettre à jour le titre d'un chat"""
+    if not await user_has_permission(db, current_user, PERM_CHAT_READ_OWN):
+        raise HTTPException(status_code=403, detail="You are not allowed to update chats")
     result = await db.execute(
         select(Chat)
         .where(Chat.id == uuid.UUID(chat_id))
@@ -207,6 +221,8 @@ async def delete_chat(
     current_user: User = Depends(get_current_active_user)
 ):
     """Archiver un chat (suppression logique)"""
+    if not await user_has_permission(db, current_user, PERM_CHAT_DELETE_OWN):
+        raise HTTPException(status_code=403, detail="You are not allowed to delete chats")
     result = await db.execute(
         select(Chat)
         .where(Chat.id == uuid.UUID(chat_id))

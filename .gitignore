@@ -72,6 +72,9 @@ backend/storage/
 .temp/
 .tmp/
 
+# Browser/DevTools accessibility snapshots
+.snap_*.json
+
 # Package files (keep package-lock.json for npm)
 # package-lock.json is tracked for reproducible builds
 yarn.lock

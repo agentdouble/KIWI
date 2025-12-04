@@ -12,12 +12,52 @@ FoyerGPT est une plateforme moderne de chat IA qui permet aux utilisateurs de cr
 - Gestion des sessions avec expiration automatique
 - Avatar utilisateur personnalisable
 
+### Gestion des droits (RBAC)
+- Modèle de rôles et permissions global (RBAC) : `admin`, `builder`, `viewer`
+- Rôles par défaut initialisés au démarrage, avec attribution automatique du rôle `builder` à tous les utilisateurs créés
+- Gestion fine des droits sur :
+  - les **agents** : création, mise à jour/suppression de ses propres agents, ou de tous les agents pour les admins
+  - les **chats** : création, consultation et archivage de ses propres conversations
+  - les **messages** : envoi, édition de ses propres messages et feedback (👍/👎) sur les réponses de l'assistant
+- Groupes d’utilisateurs avec héritage de rôles (attribution de rôles à un groupe, appliqués à tous ses membres)
+- Comptes services avec tokens API dédiés, gérés via l’API admin pour les intégrations externes
+
+#### Détail des principales permissions
+
+Les permissions sont stockées en base (table `permissions`) et associées aux rôles (`roles`) via des liens (`role_permissions`). Quelques exemples :
+
+- Agents :
+  - `agent:create` : créer des agents
+  - `agent:update:own` / `agent:delete:own` : gérer ses propres agents
+  - `agent:update:any` / `agent:delete:any` : gérer tous les agents
+- Chats :
+  - `chat:create` : créer des chats
+  - `chat:read:own` : lister et lire ses propres chats
+  - `chat:delete:own` : archiver/supprimer ses propres chats
+- Messages :
+  - `message:send` : envoyer des messages (inclut le streaming)
+  - `message:edit:own` : modifier ses propres messages utilisateur
+  - `message:feedback` : donner un feedback sur les messages de l'assistant
+
+Par défaut :
+- `admin` possède toutes ces permissions (plus les permissions d'administration : gestion utilisateurs, rôles, groupes, comptes service, etc.)
+- `builder` possède les permissions d'édition d'agents et l'ensemble des permissions de chat/messages pour utiliser la plateforme
+- `viewer` possède les permissions de chat/messages uniquement (usage de la plateforme sans création/édition d'agents)
+
+Les administrateurs disposant de la permission `rbac:manage_roles` peuvent :
+- créer des rôles personnalisés (API `POST /api/admin/roles`) en sélectionnant les permissions souhaitées,
+- modifier la description et les droits associés à un rôle existant (API `PATCH /api/admin/roles/{role_id}`),
+- supprimer un rôle non système (API `DELETE /api/admin/roles/{role_id}`).
+
+L'onglet **« Rôles & droits »** du tableau de bord admin expose ces informations et permet, pour chaque rôle, de cocher/décocher les permissions par famille (agents, chats, messages, administration, RBAC) afin d'adapter finement les droits sans toucher au code.
+
 ### Agents IA personnalisables
 - Création d'agents IA avec des prompts système personnalisés
 - Configuration des capacités d'apprentissage
 - Support multimodal (texte et documents)
 - Marketplace d'agents publics
 - Gestion des agents privés par utilisateur
+- Assistants par défaut propres à chaque utilisateur, non visibles dans le marketplace des autres comptes
 
 ### Interface de chat avancée
 - Conversations en temps réel avec streaming des réponses
@@ -26,6 +66,10 @@ FoyerGPT est une plateforme moderne de chat IA qui permet aux utilisateurs de cr
 - Export des conversations
 - Indicateurs de frappe en temps réel
 - Verrouillage par conversation : une seule génération IA à la fois par chat (prévention du spam multi-compte / multi-onglets)
+
+### Supervision et feedback
+- Tableau de bord administrateur avec onglet **Feedback** listant les messages ayant reçu un 👍/👎
+- Accès à la conversation complète associée à chaque feedback pour comprendre le contexte utilisateur
 
 ### Traitement intelligent de documents
 - Upload et analyse de documents multiformats
@@ -129,26 +173,19 @@ npm run dev
 - La création et la suppression des comptes se font depuis l'onglet **Utilisateurs** du tableau de bord administrateur.
 - Les administrateurs définissent un mot de passe temporaire ; l'utilisateur est automatiquement redirigé vers l'écran de changement de mot de passe lors de sa première connexion.
 - Tant que le mot de passe n'est pas changé, l'accès aux autres API est bloqué (seules `/api/auth/me` et `/api/auth/change-password` restent accessibles).
+- Pendant que l'assistant répond, vous pouvez continuer à saisir le prochain message : il sera envoyé dès que la réponse en cours sera terminée, le bouton d'envoi affiche un indicateur carré pour signaler qu'une réponse est en cours, et vous pouvez faire défiler l'historique sans être automatiquement ramené en bas.
 
 ### Initialiser un compte admin
 
-1. Renseignez les variables suivantes dans `backend/.env` et ajoutez le trigramme choisi à `ADMIN_TRIGRAMMES` :
+- Les droits administrateur sont déterminés uniquement par la variable `ADMIN_TRIGRAMMES` dans `backend/.env`.
+- Exemple :
 
-   ```env
-   DEFAULT_ADMIN_EMAIL=admin@example.com
-   DEFAULT_ADMIN_TRIGRAMME=ADM
-   DEFAULT_ADMIN_PASSWORD=change-me
-   ADMIN_TRIGRAMMES=ADM
-   ```
+  ```env
+  ADMIN_TRIGRAMMES=ADM,GJV,GGG
+  ```
 
-2. Créez ou mettez à jour le compte admin dans la base :
-
-   ```bash
-   cd backend
-   uv run python init_admin_user.py
-   ```
-
-Le script active le compte, rafraîchit le mot de passe et échoue explicitement si le trigramme n'est pas autorisé. Le script `./start.sh` l'exécute automatiquement si les variables `DEFAULT_ADMIN_*` sont renseignées.
+- Tout utilisateur existant dont le trigramme figure dans cette liste est considéré comme administrateur.
+- Le script `./start.sh` ne crée plus automatiquement de compte admin : la création du premier utilisateur se fait manuellement (via la base de données ou un script dédié), en veillant à utiliser un trigramme présent dans `ADMIN_TRIGRAMMES`.
 
 ### Lancement simplifié avec `start.sh`
 
@@ -250,6 +287,10 @@ uv run pytest
 cd frontend
 npm test
 ```
+
+> Remarque : certains tests liés aux intégrations MCP/PowerPoint nécessitent des modules supplémentaires (par exemple `src.converter` ou des clients MCP spécifiques). Pour vérifier uniquement le cœur de la gestion des droits, vous pouvez lancer : `uv run pytest tests/test_rbac_service.py`.
+
+> Les instantanés d’accessibilité générés localement (`.snap_*.json`) sont ignorés et peuvent être supprimés sans risque.
 
 ## Contribution
 
