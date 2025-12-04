@@ -100,11 +100,6 @@ class Settings(BaseSettings):
     max_documents_per_agent: int = 10
     max_documents_per_chat: int = 5
 
-    # Admin bootstrap (optional)
-    default_admin_email: Optional[str] = Field(default=None, alias="DEFAULT_ADMIN_EMAIL")
-    default_admin_trigramme: Optional[str] = Field(default=None, alias="DEFAULT_ADMIN_TRIGRAMME")
-    default_admin_password: Optional[str] = Field(default=None, alias="DEFAULT_ADMIN_PASSWORD")
-
     # Admins (identified by trigrammes)
     admin_trigrammes_raw: Optional[str] = Field(default=None, alias="ADMIN_TRIGRAMMES")
 

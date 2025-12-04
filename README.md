@@ -172,23 +172,15 @@ npm run dev
 
 ### Initialiser un compte admin
 
-1. Renseignez les variables suivantes dans `backend/.env` et ajoutez le trigramme choisi à `ADMIN_TRIGRAMMES` :
+- Les droits administrateur sont déterminés uniquement par la variable `ADMIN_TRIGRAMMES` dans `backend/.env`.
+- Exemple :
 
-   ```env
-   DEFAULT_ADMIN_EMAIL=admin@example.com
-   DEFAULT_ADMIN_TRIGRAMME=ADM
-   DEFAULT_ADMIN_PASSWORD=change-me
-   ADMIN_TRIGRAMMES=ADM
-   ```
+  ```env
+  ADMIN_TRIGRAMMES=ADM,GJV,GGG
+  ```
 
-2. Créez ou mettez à jour le compte admin dans la base :
-
-   ```bash
-   cd backend
-   uv run python init_admin_user.py
-   ```
-
-Le script active le compte, rafraîchit le mot de passe et échoue explicitement si le trigramme n'est pas autorisé. Le script `./start.sh` l'exécute automatiquement si les variables `DEFAULT_ADMIN_*` sont renseignées.
+- Tout utilisateur existant dont le trigramme figure dans cette liste est considéré comme administrateur.
+- Le script `./start.sh` ne crée plus automatiquement de compte admin : la création du premier utilisateur se fait manuellement (via la base de données ou un script dédié), en veillant à utiliser un trigramme présent dans `ADMIN_TRIGRAMMES`.
 
 ### Lancement simplifié avec `start.sh`
 
