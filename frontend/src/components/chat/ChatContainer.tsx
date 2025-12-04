@@ -709,6 +709,7 @@ export const ChatContainer = ({ initialChatId }: ChatContainerProps) => {
             <ChatInput 
               onSendMessage={handleSubmit}
               disabled={isSavingEdit || Boolean(editingMessageId) || isStreaming}
+              isStreaming={isStreaming}
               initialValue={inputValue}
               onValueChange={setInputValue}
               placeholder="Ask anything"
@@ -739,6 +740,7 @@ export const ChatContainer = ({ initialChatId }: ChatContainerProps) => {
           <ChatInput 
             onSendMessage={handleSubmit}
             disabled={isSavingEdit || Boolean(editingMessageId) || isStreaming}
+            isStreaming={isStreaming}
             initialValue={inputValue}
             onValueChange={setInputValue}
             chatId={activeChat?.id}

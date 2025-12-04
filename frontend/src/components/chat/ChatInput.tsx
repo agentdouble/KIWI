@@ -12,6 +12,7 @@ import { useChatStore } from '@/stores/chatStore'
 interface ChatInputProps {
   onSendMessage: (content: string, attachments?: IDocument[]) => void
   disabled?: boolean
+  isStreaming?: boolean
   initialValue?: string
   onValueChange?: (value: string) => void
   placeholder?: string
@@ -22,6 +23,7 @@ interface ChatInputProps {
 export const ChatInput = ({ 
   onSendMessage, 
   disabled = false, 
+  isStreaming = false,
   initialValue = '', 
   onValueChange,
   placeholder = "Envoyer un message...",
@@ -555,9 +557,15 @@ export const ChatInput = ({
                 "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:text-gray-400",
                 (message.trim() || attachments.length > 0) && !disabled && "text-gray-900 dark:text-gray-100"
               )}
-              aria-label="Envoyer"
+              aria-label={isStreaming ? "Réponse en cours" : "Envoyer"}
             >
-              <Send className="w-5 h-5" />
+              {isStreaming ? (
+                <div className="flex items-center justify-center w-5 h-5">
+                  <div className="w-3 h-3 rounded-sm bg-gray-900 dark:bg-gray-100" />
+                </div>
+              ) : (
+                <Send className="w-5 h-5" />
+              )}
             </button>
           </div>
           {isDragOver && (
