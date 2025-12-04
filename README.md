@@ -78,6 +78,7 @@ L'onglet **« Rôles & droits »** du tableau de bord admin expose ces informati
 - Intégration contextuelle dans les conversations
 - Support pour PDF, DOCX, TXT, MD, et images
 - Découpage robuste des documents en chunks pour le RAG (sans fuite mémoire, même sur des contenus contenant beaucoup de retours à la ligne)
+- En mode local, l'analyse visuelle passe par vLLM : les appels sont bornés par `VLLM_TIMEOUT` et le traitement est mis en échec si le serveur vision ne répond pas, pour éviter les boucles interminables
 
 ### Modes LLM flexibles
 - **Mode API** : Intégration avec l'API Mistral

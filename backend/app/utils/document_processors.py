@@ -267,8 +267,8 @@ async def _process_pdf_file(
                 )
                 return vision_text
         except Exception as e:
-            logger.error(f"❌ Erreur traitement PDF avec modèle de vision: {e}")
-            # Fallback sur le texte extrait
+            logger.error("❌ Erreur traitement PDF avec modèle de vision: %s", e, exc_info=True)
+            raise
     else:
         logger.info(f"📝 PDF traité avec extraction de texte simple ({len(extracted_text.strip())} caractères)")
     await _emit_progress(
@@ -493,23 +493,64 @@ async def _process_image_file_with_vision(
         logger.info("🚀 Utilisation du modèle de vision local (vLLM)")
         from app.services.vllm_service import VLLMService
         
-        try:
-            vllm_service = VLLMService()
-            prompt = (
-                "Analyse cette image avec le plus de précision possible. Commence par identifier le type de visuel "
-                "(photo, illustration, capture d'écran, tableau, slide, document scanné, etc.). "
-                "Ensuite, retranscris mot pour mot tout le texte lisible. Pour un tableau ou un formulaire, "
-                "restitue les en-têtes et les valeurs cellule par cellule. Pour une capture d'écran, explique "
-                "l'application ou le site montré, les sections visibles et le déroulé exact de la conversation ou des "
-                "données affichées. Pour un paysage ou une scène photo, décris en détail les éléments, leurs positions, "
-                "les couleurs, l'ambiance, ainsi que toute information contextuelle implicite (moment de la journée, "
-                "activité en cours, public visé, etc.). Termine par un résumé synthétique et les informations clés à "
-                "retenir. Organise ta réponse avec des sections claires (Type d'image, Texte exact, Description détaillée, "
-                "Résumé, Informations clés)."
-            )
-            
-            result = await vllm_service.process_image_with_vision_model(base64_image, prompt)
-            logger.info(f"✅ Modèle de vision local a retourné {len(result)} caractères")
+        vllm_service = VLLMService()
+        prompt = (
+            "Analyse cette image avec le plus de précision possible. Commence par identifier le type de visuel "
+            "(photo, illustration, capture d'écran, tableau, slide, document scanné, etc.). "
+            "Ensuite, retranscris mot pour mot tout le texte lisible. Pour un tableau ou un formulaire, "
+            "restitue les en-têtes et les valeurs cellule par cellule. Pour une capture d'écran, explique "
+            "l'application ou le site montré, les sections visibles et le déroulé exact de la conversation ou des "
+            "données affichées. Pour un paysage ou une scène photo, décris en détail les éléments, leurs positions, "
+            "les couleurs, l'ambiance, ainsi que toute information contextuelle implicite (moment de la journée, "
+            "activité en cours, public visé, etc.). Termine par un résumé synthétique et les informations clés à "
+            "retenir. Organise ta réponse avec des sections claires (Type d'image, Texte exact, Description détaillée, "
+            "Résumé, Informations clés)."
+        )
+        
+        result = await vllm_service.process_image_with_vision_model(base64_image, prompt)
+        logger.info(f"✅ Modèle de vision local a retourné {len(result)} caractères")
+        logger.info(f"📄 Aperçu: {result[:200]}...")
+        await _emit_progress(
+            progress_callback,
+            {
+                "stage": "vision_analysis",
+                "stage_label": "Analyse visuelle (VLM)",
+                "current": position or 1,
+                "total": total or 1,
+                "progress": progress_end,
+                "message": "Analyse visuelle terminée",
+            },
+        )
+        return result
+    else:
+        logger.info(f"🚀 Appel API vision avec modèle: {settings.vision_model}")
+        image_url = f"data:{mime_type};base64,{base64_image}"
+        
+        response = await _call_vision_api(
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": """Analyse cette image et fais une transcription complète et détaillée de son contenu. 
+                            Si l'image contient du texte, transcris-le exactement. 
+                            Si l'image contient des éléments visuels (graphiques, schémas, photos), décris-les de manière détaillée.
+                            Si c'est une capture d'écran, décris l'interface et transcris tout le texte visible.
+                            Organise ta réponse de manière structurée."""
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": image_url
+                        }
+                    ]
+                }
+            ]
+        )
+        
+        result = _extract_content_from_response(response)
+        if result:
+            logger.info(f"✅ Modèle de vision API a retourné {len(result)} caractères")
             logger.info(f"📄 Aperçu: {result[:200]}...")
             await _emit_progress(
                 progress_callback,
@@ -523,59 +564,9 @@ async def _process_image_file_with_vision(
                 },
             )
             return result
-            
-        except Exception as e:
-            logger.error(f"❌ Erreur modèle de vision local: {str(e)}", exc_info=True)
-            return f"Erreur lors de l'analyse de l'image avec le modèle de vision local: {str(e)}"
-    else:
-        logger.info(f"🚀 Appel API vision avec modèle: {settings.vision_model}")
-        image_url = f"data:{mime_type};base64,{base64_image}"
-        
-        try:
-            response = await _call_vision_api(
-                [
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": """Analyse cette image et fais une transcription complète et détaillée de son contenu. 
-                                Si l'image contient du texte, transcris-le exactement. 
-                                Si l'image contient des éléments visuels (graphiques, schémas, photos), décris-les de manière détaillée.
-                                Si c'est une capture d'écran, décris l'interface et transcris tout le texte visible.
-                                Organise ta réponse de manière structurée."""
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": image_url
-                            }
-                        ]
-                    }
-                ]
-            )
-            
-            result = _extract_content_from_response(response)
-            if result:
-                logger.info(f"✅ Modèle de vision API a retourné {len(result)} caractères")
-                logger.info(f"📄 Aperçu: {result[:200]}...")
-                await _emit_progress(
-                    progress_callback,
-                    {
-                        "stage": "vision_analysis",
-                        "stage_label": "Analyse visuelle (VLM)",
-                        "current": position or 1,
-                        "total": total or 1,
-                        "progress": progress_end,
-                        "message": "Analyse visuelle terminée",
-                    },
-                )
-                return result
-            logger.error("❌ Le modèle de vision API n'a retourné aucune réponse")
-            return "Erreur: Aucune transcription générée par le modèle de vision"
-            
-        except Exception as e:
-            logger.error(f"❌ Erreur modèle de vision (API): {str(e)}", exc_info=True)
-            return f"Erreur lors de l'analyse de l'image avec le modèle de vision: {str(e)}"
+
+        logger.error("❌ Le modèle de vision API n'a retourné aucune réponse")
+        raise RuntimeError("Erreur: Aucune transcription générée par le modèle de vision")
 
 async def _process_pdf_with_vision(
     file_path: Path,
@@ -653,8 +644,8 @@ async def _process_pdf_with_vision(
                     image_data = await f.read()
                     base64_image = base64.b64encode(image_data).decode('utf-8')
                 
-                # Analyser avec le modèle de vision (API ou local selon le mode)
                 try:
+                    # Analyser avec le modèle de vision (API ou local selon le mode)
                     prompt = (
                         f"Analyse la page {i+1} de ce PDF en suivant les directives suivantes : identifie d'abord le type de "
                         "contenu visuel principal (document imprimé, capture d'écran, diapositive, photo, tableau, etc.). "
@@ -667,8 +658,6 @@ async def _process_pdf_with_vision(
                         "détaillée, Résumé, Informations clés."
                     )
                     
-                    page_content: Optional[str] = None
-
                     if settings.llm_mode == "local":
                         page_content = await vllm_service.process_image_with_vision_model(base64_image, prompt)
                     else:
@@ -697,9 +686,6 @@ async def _process_pdf_with_vision(
                     else:
                         logger.warning("Le modèle de vision n'a renvoyé aucun contenu pour la page %d", i + 1)
                         raise RuntimeError("La réponse du modèle de vision est vide")
-
-                except Exception as e:
-                    results.append(f"\n=== Page {i+1} ===\nErreur lors de l'analyse: {str(e)}")
                 finally:
                     current_page = min(i + 1, total_pages)
                     await _emit_progress(
@@ -721,7 +707,8 @@ async def _process_pdf_with_vision(
                     break
                     
         except Exception as e:
-            return f"Erreur lors de la conversion PDF en images: {str(e)}"
+            logger.error("Erreur lors du traitement PDF avec le modèle de vision: %s", e, exc_info=True)
+            raise
 
     await _emit_progress(
         progress_callback,
