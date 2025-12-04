@@ -374,18 +374,31 @@ class VLLMService:
         }
         
         try:
-            async with httpx.AsyncClient(timeout=self.timeout, verify=self.verify_ssl) as client:
+            timeout = httpx.Timeout(self.timeout, connect=min(10.0, float(self.timeout)))
+            async with httpx.AsyncClient(timeout=timeout, verify=self.verify_ssl) as client:
                 await self._sync_vision_model(client)
                 payload["model"] = self.vision_model
 
                 logger.info(
-                    "Sending image to vision vLLM at %s with model %s",
+                    "Sending image to vision vLLM at %s with model %s (timeout=%ss)",
                     self.vision_url,
                     self.vision_model,
+                    self.timeout,
                 )
 
                 try:
-                    response = await client.post(self.vision_url, json=payload, headers=headers)
+                    async with asyncio.timeout(self.timeout):
+                        response = await client.post(self.vision_url, json=payload, headers=headers)
+                except TimeoutError:
+                    logger.error(
+                        "Vision vLLM request timed out after %ss at %s",
+                        self.timeout,
+                        self.vision_url,
+                    )
+                    raise ExternalServiceError(
+                        "Vision vLLM",
+                        Exception(f"Request timed out after {self.timeout}s"),
+                    )
                 except httpx.ConnectError as conn_err:
                     logger.error(
                         "Vision vLLM connection failed at %s: %s",
@@ -407,7 +420,8 @@ class VLLMService:
                         "Retrying vision vLLM request with resolved model %s",
                         self.vision_model,
                     )
-                    response = await client.post(self.vision_url, json=payload, headers=headers)
+                    async with asyncio.timeout(self.timeout):
+                        response = await client.post(self.vision_url, json=payload, headers=headers)
 
                 if response.status_code == 200:
                     result = response.json()
