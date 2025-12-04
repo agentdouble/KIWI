@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_, func, and_, delete, not_
+from sqlalchemy import select, or_, func, and_, delete
 from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.models.agent import Agent, AgentFavorite
@@ -31,10 +31,16 @@ router = APIRouter()
 
 def _is_personal_default_agent(agent: Agent) -> bool:
     """Détecte les assistants par défaut personnels créés automatiquement."""
-    tags = agent.tags or []
+    tags = [t.lower() for t in (agent.tags or [])]
+    name = (agent.name or "").strip() if agent.name else ""
+    description = (agent.description or "").strip() if agent.description else ""
     return (
-        agent.name == "Assistant par défaut"
-        and ("default" in tags or "personal" in tags)
+        name == "Assistant par défaut"
+        and (
+            description == "Votre assistant personnel"
+            or "default" in tags
+            or "personal" in tags
+        )
     )
 
 
@@ -81,18 +87,11 @@ async def get_agents(
         )
     elif current_user:
         # User connecté : voir ses agents privés + tous les agents publics
-        personal_default_filter = and_(
-            Agent.name == "Assistant par défaut",
-            Agent.tags.contains(["default"]),
-        )
         result = await db.execute(
             select(Agent).where(
                 or_(
                     Agent.user_id == current_user.id,
-                    and_(
-                        Agent.is_public == True,
-                        not_(personal_default_filter),
-                    ),
+                    Agent.is_public == True,
                 )
             )
             .options(selectinload(Agent.user))
@@ -102,22 +101,16 @@ async def get_agents(
         # User non connecté : voir seulement les agents publics
         result = await db.execute(
             select(Agent)
-            .where(
-                and_(
-                    Agent.is_public == True,
-                    not_(
-                        and_(
-                            Agent.name == "Assistant par défaut",
-                            Agent.tags.contains(["default"]),
-                        )
-                    ),
-                )
-            )
+            .where(Agent.is_public == True)
             .options(selectinload(Agent.user))
             .order_by(Agent.created_at.desc())
         )
     
     agents = result.scalars().all()
+
+    # Ne jamais exposer les assistants personnels par défaut dans les listings (marketplace),
+    # quel que soit le rôle de l'utilisateur.
+    agents = [agent for agent in agents if not _is_personal_default_agent(agent)]
     
     return [
         AgentResponse(**agent_to_response(agent, agent.id in favorite_agent_ids)) for agent in agents
