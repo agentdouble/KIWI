@@ -73,6 +73,18 @@ class RoleSummary(BaseModel):
     permissions: List[str]
 
 
+class RoleCreateRequest(BaseModel):
+    name: str
+    description: Optional[str] = None
+    permissions: List[str]
+
+
+class RoleUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    permissions: Optional[List[str]] = None
+
+
 class GroupSummary(BaseModel):
     id: UUID
     name: str

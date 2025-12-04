@@ -17,6 +17,14 @@ PERM_AGENT_UPDATE_ANY = "agent:update:any"
 PERM_AGENT_DELETE_OWN = "agent:delete:own"
 PERM_AGENT_DELETE_ANY = "agent:delete:any"
 
+PERM_CHAT_CREATE = "chat:create"
+PERM_CHAT_READ_OWN = "chat:read:own"
+PERM_CHAT_DELETE_OWN = "chat:delete:own"
+
+PERM_MESSAGE_SEND = "message:send"
+PERM_MESSAGE_EDIT_OWN = "message:edit:own"
+PERM_MESSAGE_FEEDBACK = "message:feedback"
+
 PERM_ADMIN_USERS_MANAGE = "admin:users:manage"
 PERM_ADMIN_DASHBOARD_VIEW = "admin:dashboard:view"
 
@@ -31,6 +39,12 @@ DEFAULT_PERMISSIONS: List[Tuple[str, str]] = [
     (PERM_AGENT_UPDATE_ANY, "Mettre à jour tous les agents"),
     (PERM_AGENT_DELETE_OWN, "Supprimer ses propres agents"),
     (PERM_AGENT_DELETE_ANY, "Supprimer tous les agents"),
+    (PERM_CHAT_CREATE, "Créer de nouveaux chats"),
+    (PERM_CHAT_READ_OWN, "Consulter ses propres chats"),
+    (PERM_CHAT_DELETE_OWN, "Archiver ou supprimer ses propres chats"),
+    (PERM_MESSAGE_SEND, "Envoyer des messages dans ses chats"),
+    (PERM_MESSAGE_EDIT_OWN, "Modifier ses propres messages"),
+    (PERM_MESSAGE_FEEDBACK, "Donner un feedback sur les messages de l'assistant"),
     (PERM_ADMIN_USERS_MANAGE, "Gérer les utilisateurs et l'administration"),
     (PERM_ADMIN_DASHBOARD_VIEW, "Accéder au tableau de bord admin"),
     (PERM_RBAC_MANAGE_ROLES, "Gérer les rôles et permissions"),
@@ -50,6 +64,12 @@ DEFAULT_ROLES: Dict[str, List[str]] = {
         PERM_AGENT_UPDATE_ANY,
         PERM_AGENT_DELETE_OWN,
         PERM_AGENT_DELETE_ANY,
+        PERM_CHAT_CREATE,
+        PERM_CHAT_READ_OWN,
+        PERM_CHAT_DELETE_OWN,
+        PERM_MESSAGE_SEND,
+        PERM_MESSAGE_EDIT_OWN,
+        PERM_MESSAGE_FEEDBACK,
         PERM_ADMIN_USERS_MANAGE,
         PERM_ADMIN_DASHBOARD_VIEW,
         PERM_RBAC_MANAGE_ROLES,
@@ -60,8 +80,21 @@ DEFAULT_ROLES: Dict[str, List[str]] = {
         PERM_AGENT_CREATE,
         PERM_AGENT_UPDATE_OWN,
         PERM_AGENT_DELETE_OWN,
+        PERM_CHAT_CREATE,
+        PERM_CHAT_READ_OWN,
+        PERM_CHAT_DELETE_OWN,
+        PERM_MESSAGE_SEND,
+        PERM_MESSAGE_EDIT_OWN,
+        PERM_MESSAGE_FEEDBACK,
     ],
-    ROLE_VIEWER: [],
+    ROLE_VIEWER: [
+        PERM_CHAT_CREATE,
+        PERM_CHAT_READ_OWN,
+        PERM_CHAT_DELETE_OWN,
+        PERM_MESSAGE_SEND,
+        PERM_MESSAGE_EDIT_OWN,
+        PERM_MESSAGE_FEEDBACK,
+    ],
 }
 
 

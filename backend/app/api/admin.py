@@ -36,6 +36,8 @@ from app.schemas.admin import (
     GroupSummary,
     PermissionSummary,
     RoleSummary,
+    RoleCreateRequest,
+    RoleUpdateRequest,
     ServiceAccountCreateRequest,
     ServiceAccountSummary,
     ServiceAccountTokenResponse,
@@ -343,6 +345,143 @@ async def list_roles(
             )
         )
     return summaries
+
+
+@router.post("/roles", response_model=RoleSummary, status_code=status.HTTP_201_CREATED)
+async def create_role(
+    payload: RoleCreateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    if not await user_has_permission(db, current_admin, PERM_RBAC_MANAGE_ROLES):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="RBAC role management not allowed")
+
+    existing = await db.execute(select(Role).where(Role.name == payload.name))
+    if existing.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Un rôle existe déjà avec ce nom.",
+        )
+
+    role = Role(
+        name=payload.name,
+        description=payload.description,
+        is_system=False,
+    )
+    db.add(role)
+    await db.flush()
+
+    if payload.permissions:
+        perm_rows = await db.execute(
+            select(Permission).where(Permission.code.in_(set(payload.permissions)))
+        )
+        perms = perm_rows.scalars().all()
+        for perm in perms:
+            db.add(RolePermission(role_id=role.id, permission_id=perm.id))
+
+    await db.commit()
+    await db.refresh(role)
+
+    perm_codes_result = await db.execute(
+        select(Permission.code)
+        .join(RolePermission, RolePermission.permission_id == Permission.id)
+        .where(RolePermission.role_id == role.id)
+    )
+    perm_codes = sorted({code for (code,) in perm_codes_result.all()})
+
+    return RoleSummary(
+        id=role.id,
+        name=role.name,
+        description=role.description,
+        is_system=bool(role.is_system),
+        permissions=perm_codes,
+    )
+
+
+@router.patch("/roles/{role_id}", response_model=RoleSummary)
+async def update_role(
+    role_id: UUID,
+    payload: RoleUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    if not await user_has_permission(db, current_admin, PERM_RBAC_MANAGE_ROLES):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="RBAC role management not allowed")
+
+    role = await db.get(Role, role_id)
+    if not role:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Rôle introuvable.")
+
+    if payload.name and payload.name != role.name:
+        if role.is_system:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Le nom des rôles système ne peut pas être modifié.",
+            )
+        existing = await db.execute(select(Role).where(Role.name == payload.name))
+        if existing.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Un rôle existe déjà avec ce nom.",
+            )
+        role.name = payload.name
+
+    if payload.description is not None:
+        role.description = payload.description
+
+    if payload.permissions is not None:
+        await db.execute(
+            delete(RolePermission).where(RolePermission.role_id == role.id)
+        )
+        if payload.permissions:
+            perm_rows = await db.execute(
+                select(Permission).where(Permission.code.in_(set(payload.permissions)))
+            )
+            perms = perm_rows.scalars().all()
+            for perm in perms:
+                db.add(RolePermission(role_id=role.id, permission_id=perm.id))
+
+    await db.commit()
+    await db.refresh(role)
+
+    perm_codes_result = await db.execute(
+        select(Permission.code)
+        .join(RolePermission, RolePermission.permission_id == Permission.id)
+        .where(RolePermission.role_id == role.id)
+    )
+    perm_codes = sorted({code for (code,) in perm_codes_result.all()})
+
+    return RoleSummary(
+        id=role.id,
+        name=role.name,
+        description=role.description,
+        is_system=bool(role.is_system),
+        permissions=perm_codes,
+    )
+
+
+@router.delete("/roles/{role_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_role(
+    role_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    if not await user_has_permission(db, current_admin, PERM_RBAC_MANAGE_ROLES):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="RBAC role management not allowed")
+
+    role = await db.get(Role, role_id)
+    if not role:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Rôle introuvable.")
+
+    if role.is_system:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Les rôles système ne peuvent pas être supprimés.",
+        )
+
+    await db.delete(role)
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/users/{user_id}/roles", response_model=List[RoleSummary])

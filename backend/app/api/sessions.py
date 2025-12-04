@@ -9,6 +9,11 @@ from app.schemas.session import SessionResponse
 from app.schemas.chat import ChatResponse, CreateChatRequest
 from app.schemas.message import MessageResponse
 from app.utils.auth import get_current_user
+from app.services.rbac_service import (
+    PERM_CHAT_CREATE,
+    PERM_CHAT_READ_OWN,
+    user_has_permission,
+)
 from app.models.user import User
 import uuid
 from typing import List
@@ -73,6 +78,8 @@ async def get_session_chats(
     current_user: User = Depends(get_current_user)
 ):
     """Récupérer tous les chats d'une session"""
+    if not await user_has_permission(db, current_user, PERM_CHAT_READ_OWN):
+        raise HTTPException(status_code=403, detail="You are not allowed to list your chats")
     result = await db.execute(
         select(Chat)
         .where(Chat.user_id == current_user.id)
@@ -110,6 +117,8 @@ async def create_session_chat(
     current_user: User = Depends(get_current_user)
 ):
     """Créer un nouveau chat pour une session"""
+    if not await user_has_permission(db, current_user, PERM_CHAT_CREATE):
+        raise HTTPException(status_code=403, detail="You are not allowed to create chats")
     # Gérer agent_id de manière plus robuste
     agent_id = None
     if request.agent_id and request.agent_id != "null" and request.agent_id != "undefined":

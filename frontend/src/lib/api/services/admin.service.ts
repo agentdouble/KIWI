@@ -49,6 +49,23 @@ export const adminService = {
     return response.data
   },
 
+  async createRole(payload: { name: string; description?: string | null; permissions: string[] }): Promise<RoleSummary> {
+    const response = await api.post<RoleSummary>('/api/admin/roles', payload)
+    return response.data
+  },
+
+  async updateRole(
+    roleId: string,
+    payload: { name?: string; description?: string | null; permissions?: string[] }
+  ): Promise<RoleSummary> {
+    const response = await api.patch<RoleSummary>(`/api/admin/roles/${roleId}`, payload)
+    return response.data
+  },
+
+  async deleteRole(roleId: string): Promise<void> {
+    await api.delete(`/api/admin/roles/${roleId}`)
+  },
+
   async getUserRoles(userId: string): Promise<RoleSummary[]> {
     const response = await api.get<RoleSummary[]>(`/api/admin/users/${userId}/roles`)
     return response.data

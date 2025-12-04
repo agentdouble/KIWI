@@ -9,7 +9,14 @@ from app.models.user import User
 from app.services.rbac_service import (
     PERM_ADMIN_USERS_MANAGE,
     PERM_AGENT_CREATE,
+    PERM_CHAT_CREATE,
+    PERM_CHAT_READ_OWN,
+    PERM_CHAT_DELETE_OWN,
+    PERM_MESSAGE_SEND,
+    PERM_MESSAGE_EDIT_OWN,
+    PERM_MESSAGE_FEEDBACK,
     ROLE_BUILDER,
+    ROLE_VIEWER,
     assign_default_roles_for_user,
     ensure_rbac_defaults,
     user_has_permission,
@@ -102,5 +109,45 @@ def test_user_has_permission_for_builder_role():
 
         assert await user_has_permission(session, user, PERM_AGENT_CREATE)
         assert not await user_has_permission(session, user, PERM_ADMIN_USERS_MANAGE)
+        assert await user_has_permission(session, user, PERM_CHAT_CREATE)
+        assert await user_has_permission(session, user, PERM_CHAT_READ_OWN)
+        assert await user_has_permission(session, user, PERM_CHAT_DELETE_OWN)
+        assert await user_has_permission(session, user, PERM_MESSAGE_SEND)
+        assert await user_has_permission(session, user, PERM_MESSAGE_EDIT_OWN)
+        assert await user_has_permission(session, user, PERM_MESSAGE_FEEDBACK)
+
+    asyncio.run(_with_session(_test))
+
+
+def test_viewer_role_permissions():
+    async def _test(session: AsyncSession):
+        await ensure_rbac_defaults(session)
+
+        user = User(email="viewer@example.com", trigramme="VWR", is_active=True)
+        user.set_password("password-secure")
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
+
+        viewer_role = (
+            await session.execute(select(Role).where(Role.name == ROLE_VIEWER))
+        ).scalar_one()
+
+        session.add(
+            PrincipalRole(
+                principal_type="user",
+                principal_id=user.id,
+                role_id=viewer_role.id,
+            )
+        )
+        await session.commit()
+
+        assert await user_has_permission(session, user, PERM_CHAT_CREATE)
+        assert await user_has_permission(session, user, PERM_CHAT_READ_OWN)
+        assert await user_has_permission(session, user, PERM_CHAT_DELETE_OWN)
+        assert await user_has_permission(session, user, PERM_MESSAGE_SEND)
+        assert await user_has_permission(session, user, PERM_MESSAGE_EDIT_OWN)
+        assert await user_has_permission(session, user, PERM_MESSAGE_FEEDBACK)
+        assert not await user_has_permission(session, user, PERM_AGENT_CREATE)
 
     asyncio.run(_with_session(_test))
