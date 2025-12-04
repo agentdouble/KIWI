@@ -158,9 +158,9 @@ export const AgentForm = () => {
     }
   }
 
-  const uploadPendingDocuments = async (targetAgentId: string) => {
+  const uploadPendingDocuments = async (targetAgentId: string): Promise<boolean> => {
     const tempDocuments = documents.filter((doc: any) => doc._tempFile) as (IDocument & { _tempFile: File })[]
-    if (tempDocuments.length === 0) return
+    if (tempDocuments.length === 0) return false
 
     setAwaitingDocProcessing(true)
     setDocuments((prev) =>
@@ -215,6 +215,7 @@ export const AgentForm = () => {
         }
       })
     )
+    return true
   }
 
   const handleSubmit = async (e?: React.FormEvent) => {
@@ -279,12 +280,21 @@ export const AgentForm = () => {
           is_public: agentData.isPublic || false
         })
 
-        await uploadPendingDocuments(targetId)
+        const hadActiveDocs = documents.some(
+          (doc) => doc.processing_status === 'pending' || doc.processing_status === 'processing'
+        )
+
+        const startedUploads = await uploadPendingDocuments(targetId)
+        const shouldWait = hadActiveDocs || startedUploads
+
+        if (shouldWait) {
+          setAwaitingDocProcessing(true)
+          setIsProcessing(true)
+          return
+        }
 
         setIsProcessing(false)
-        if (!awaitingDocProcessing) {
-          navigate('/my-gpts')
-        }
+        navigate('/my-gpts')
       } catch (error) {
         console.error('Failed to create agent:', error)
         setIsProcessing(false)
@@ -309,9 +319,12 @@ export const AgentForm = () => {
 
     if (!hasTempDocs && !hasActiveProcessing) {
       setAwaitingDocProcessing(false)
-      if (!isProcessing && requestRedirect) {
+      if (requestRedirect) {
+        setIsProcessing(false)
         navigate('/my-gpts')
       }
+    } else if (!isProcessing) {
+      setIsProcessing(true)
     }
   }, [awaitingDocProcessing, documents, navigate, isProcessing, requestRedirect])
 
@@ -526,6 +539,7 @@ export const AgentForm = () => {
                 entityId={createdAgentId}
                 documents={documents}
                 onDocumentsChange={handleDocumentsChange}
+                onRequireEntityId={ensureAgentCreated}
               />
             </div>
 
