@@ -274,6 +274,8 @@ Le frontend se connecte automatiquement au backend via la variable d'environneme
 
 Le module MCP PowerPoint (dossier `backend/mcp/powerpoint_mcp`) réutilise automatiquement cette configuration LLM du backend (`LLM_MODE`, `MISTRAL_API_KEY`, `VLLM_API_URL`, `VLLM_MODEL_NAME`) : vous n'avez donc à définir ces variables qu'une seule fois dans `backend/.env`.
 
+> Sécurité frontend : pour éviter toute fuite d'informations sensibles et garder une console F12 propre, tous les appels `console.log`, `console.info`, `console.warn`, `console.error` et `console.debug` sont neutralisés globalement côté frontend (en développement comme en production). Pour le débogage, privilégiez les outils réseau du navigateur, les notifications UI et les logs backend.
+
 > Le reloader Uvicorn est désactivé par défaut pour éviter la création de multiples processus lors des écritures dans `./storage`. Activez-le seulement en développement via `BACKEND_RELOAD=1` (le dossier de stockage est exclu du watcher) si vous avez besoin du hot reload.
 
 ## Tests
