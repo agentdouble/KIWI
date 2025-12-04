@@ -11,6 +11,7 @@ import { Plus, Globe, Lock, X, Camera } from 'lucide-react'
 import { AGENT_CATEGORIES, CATEGORY_LABELS } from '@/constants/categories'
 import { AnimatedCreateButton } from '@/components/ui/animated-create-button'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 
 export const AgentForm = () => {
   const navigate = useNavigate()
@@ -39,6 +40,7 @@ export const AgentForm = () => {
   const [isProcessing, setIsProcessing] = useState(false)
   const [awaitingDocProcessing, setAwaitingDocProcessing] = useState(false)
   const [createdAgentId, setCreatedAgentId] = useState<string | undefined>(id)
+  const [requestRedirect, setRequestRedirect] = useState(false)
   const [errors, setErrors] = useState<Record<string, boolean>>({})
   const [showValidationError, setShowValidationError] = useState(false)
   
@@ -105,22 +107,121 @@ export const AgentForm = () => {
     setLoadingDocuments(false)
   }
 
-  const handleSubmit = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault()
-    
-    // Validation
+  const validateMandatoryFields = (): Record<string, boolean> => {
     const newErrors: Record<string, boolean> = {}
     if (!formData.name) newErrors.name = true
     if (!formData.description) newErrors.description = true
     if (!formData.systemPrompt) newErrors.systemPrompt = true
-    
-    // Vérifier qu'une image est fournie (soit emoji, soit image uploadée)
     if (avatarType === 'emoji' && !formData.avatar) {
       newErrors.avatar = true
     } else if (avatarType === 'image' && !formData.avatarImage) {
       newErrors.avatarImage = true
     }
+    return newErrors
+  }
+
+  const ensureAgentCreated = async (): Promise<string | undefined> => {
+    if (createdAgentId) return createdAgentId
+
+    const newErrors = validateMandatoryFields()
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors)
+      setShowValidationError(true)
+      setTimeout(() => setShowValidationError(false), 3000)
+      toast.error('Complétez les champs requis avant d\'ajouter des documents')
+      return undefined
+    }
+
+    const payload: any = {
+      name: formData.name,
+      description: formData.description,
+      system_prompt: formData.systemPrompt,
+      avatar: avatarType === 'emoji' ? formData.avatar : '',
+      avatar_image: avatarType === 'image' ? formData.avatarImage : undefined,
+      capabilities: [],
+      is_public: formData.isPublic || false
+    }
+
+    try {
+      setIsProcessing(true)
+      const created = await agentService.createAgent(payload)
+      if (created?.id) {
+        setCreatedAgentId(created.id)
+        return created.id
+      }
+      return undefined
+    } catch (error) {
+      toast.error('Impossible de créer l\'agent pour traiter le document')
+      return undefined
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  const uploadPendingDocuments = async (targetAgentId: string) => {
+    const tempDocuments = documents.filter((doc: any) => doc._tempFile) as (IDocument & { _tempFile: File })[]
+    if (tempDocuments.length === 0) return
+
+    setAwaitingDocProcessing(true)
+    setDocuments((prev) =>
+      prev.map((doc) =>
+        (doc as any)._tempFile
+          ? {
+              ...doc,
+              processing_status: 'processing',
+              processing_error: null,
+              document_metadata: {
+                ...(doc.document_metadata || {}),
+                processing_stage: 'uploading',
+                stage_label: 'Upload en cours',
+                progress: 0.05,
+              },
+              _isUploading: true,
+            }
+          : doc
+      )
+    )
+
+    await Promise.all(
+      tempDocuments.map(async (doc) => {
+        try {
+          const uploaded = await documentService.uploadAgentDocument(targetAgentId, doc._tempFile, doc.name)
+          if (uploaded) {
+            setDocuments((prev) =>
+              prev.map((item) => (item.id === doc.id ? uploaded : item))
+            )
+          }
+        } catch (uploadError) {
+          console.error('Failed to upload document:', uploadError)
+          setDocuments((prev) =>
+            prev.map((item) =>
+              item.id === doc.id
+                ? {
+                    ...item,
+                    processing_status: 'failed',
+                    processing_error: 'Upload échoué',
+                    document_metadata: {
+                      ...(item.document_metadata || {}),
+                      processing_stage: 'failed',
+                      stage_label: 'Upload échoué',
+                      progress: 1,
+                    },
+                    _tempFile: undefined,
+                    _isUploading: false,
+                  }
+                : item
+            )
+          )
+        }
+      })
+    )
+  }
+
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
     
+    // Validation
+    const newErrors = validateMandatoryFields()
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors)
       setShowValidationError(true)
@@ -130,7 +231,7 @@ export const AgentForm = () => {
     
     setErrors({})
     setIsProcessing(true)
-    setAwaitingDocProcessing(false)
+    setRequestRedirect(true)
     
     const agentData: any = {
       name: formData.name,
@@ -153,17 +254,22 @@ export const AgentForm = () => {
           capabilities: agentData.capabilities || [],
           is_public: agentData.isPublic || false
         })
-        // Attendre 2 secondes avant de rediriger
-        setTimeout(() => {
-          navigate('/my-gpts')
-        }, 2000)
+        setIsProcessing(false)
+        navigate('/my-gpts')
       } catch (error) {
         console.error('Failed to update agent:', error)
         setIsProcessing(false)
       }
     } else {
       try {
-        const newAgent = await agentService.createAgent({
+        const targetId = createdAgentId || await ensureAgentCreated()
+        if (!targetId) {
+          setIsProcessing(false)
+          setRequestRedirect(false)
+          return
+        }
+
+        await agentService.updateAgent(targetId, {
           name: agentData.name,
           description: agentData.description,
           system_prompt: agentData.systemPrompt,
@@ -173,77 +279,16 @@ export const AgentForm = () => {
           is_public: agentData.isPublic || false
         })
 
-        if (!newAgent) {
-          setIsProcessing(false)
-          return
-        }
+        await uploadPendingDocuments(targetId)
 
-        setCreatedAgentId(newAgent.id)
-
-        const tempDocuments = documents.filter((doc: any) => doc._tempFile) as (IDocument & { _tempFile: File })[]
-
-        if (tempDocuments.length === 0) {
-          setIsProcessing(false)
+        setIsProcessing(false)
+        if (!awaitingDocProcessing) {
           navigate('/my-gpts')
-          return
         }
-
-        setAwaitingDocProcessing(true)
-        setDocuments((prev) =>
-          prev.map((doc) =>
-            (doc as any)._tempFile
-              ? {
-                  ...doc,
-                  processing_status: 'processing',
-                  processing_error: null,
-                  document_metadata: {
-                    ...(doc.document_metadata || {}),
-                    processing_stage: 'uploading',
-                    stage_label: 'Upload en cours',
-                    progress: 0.05,
-                  },
-                  _isUploading: true,
-                }
-              : doc
-          )
-        )
-
-        await Promise.all(
-          tempDocuments.map(async (doc) => {
-            try {
-              const uploaded = await documentService.uploadAgentDocument(newAgent.id, doc._tempFile, doc.name)
-              if (uploaded) {
-                setDocuments((prev) =>
-                  prev.map((item) => (item.id === doc.id ? uploaded : item))
-                )
-              }
-            } catch (uploadError) {
-              console.error('Failed to upload document:', uploadError)
-              setDocuments((prev) =>
-                prev.map((item) =>
-                  item.id === doc.id
-                    ? {
-                        ...item,
-                        processing_status: 'failed',
-                        processing_error: 'Upload échoué',
-                        document_metadata: {
-                          ...(item.document_metadata || {}),
-                          processing_stage: 'failed',
-                          stage_label: 'Upload échoué',
-                          progress: 1,
-                        },
-                        _tempFile: undefined,
-                        _isUploading: false,
-                      }
-                    : item
-                )
-              )
-            }
-          })
-        )
       } catch (error) {
         console.error('Failed to create agent:', error)
         setIsProcessing(false)
+        setRequestRedirect(false)
       }
     }
   }
@@ -264,10 +309,17 @@ export const AgentForm = () => {
 
     if (!hasTempDocs && !hasActiveProcessing) {
       setAwaitingDocProcessing(false)
-      setIsProcessing(false)
-      navigate('/my-gpts')
+      if (!isProcessing && requestRedirect) {
+        navigate('/my-gpts')
+      }
     }
-  }, [awaitingDocProcessing, documents, navigate])
+  }, [awaitingDocProcessing, documents, navigate, isProcessing, requestRedirect])
+
+  useEffect(() => {
+    if (createdAgentId) {
+      uploadPendingDocuments(createdAgentId)
+    }
+  }, [createdAgentId])
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]

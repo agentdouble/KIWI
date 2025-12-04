@@ -10,6 +10,7 @@ interface DocumentUploadProps {
   entityId?: string
   documents: IDocument[]
   onDocumentsChange: (documents: IDocument[]) => void
+  onRequireEntityId?: () => Promise<string | undefined>
   maxFiles?: number
   maxSizeMB?: number
   acceptedTypes?: string[]
@@ -20,6 +21,7 @@ export const DocumentUpload = ({
   entityId,
   documents,
   onDocumentsChange,
+  onRequireEntityId,
   maxFiles = entityType === 'agent' ? 10 : 5,
   maxSizeMB = 10,
   acceptedTypes = ['.pdf', '.docx', '.txt', '.md', '.doc', '.rtf', '.png', '.jpg', '.jpeg', '.gif', '.webp']
@@ -29,9 +31,16 @@ export const DocumentUpload = ({
   const [error, setError] = useState<string | null>(null)
   const pollingRef = useRef<Record<string, boolean>>({})
   const documentsRef = useRef<IDocument[]>(documents)
+  const [resolvedEntityId, setResolvedEntityId] = useState<string | undefined>(entityId)
+  const [isResolvingEntity, setIsResolvingEntity] = useState(false)
   useEffect(() => {
     documentsRef.current = documents
   }, [documents])
+  useEffect(() => {
+    if (entityId && entityId !== resolvedEntityId) {
+      setResolvedEntityId(entityId)
+    }
+  }, [entityId, resolvedEntityId])
 
   const updateDocuments = (updater: (docs: IDocument[]) => IDocument[]) => {
     const next = updater(documentsRef.current)
@@ -87,8 +96,24 @@ export const DocumentUpload = ({
   }, [documents])
 
   const handleFiles = async (files: FileList) => {
-    // Si pas d'entityId, on stocke les fichiers localement pour upload ultérieur
-    if (!entityId) {
+    let targetEntityId = resolvedEntityId
+
+    if (!targetEntityId && onRequireEntityId) {
+      try {
+        setIsResolvingEntity(true)
+        targetEntityId = await onRequireEntityId()
+        if (targetEntityId) {
+          setResolvedEntityId(targetEntityId)
+        }
+      } catch (resolveError) {
+        setError('Impossible de préparer la création de l’agent pour déposer le document')
+      } finally {
+        setIsResolvingEntity(false)
+      }
+    }
+
+    // Si toujours pas d'entityId, on stocke les fichiers localement pour upload ultérieur
+    if (!targetEntityId) {
       const newFiles = Array.from(files).map(file => ({
         id: `temp-${Date.now()}-${Math.random()}`,
         name: file.name,
@@ -134,7 +159,7 @@ export const DocumentUpload = ({
       storage_path: '',
       processed_path: null,
       entity_type: entityType,
-      entity_id: entityId || '',
+      entity_id: targetEntityId || '',
       uploaded_by: null,
       created_at: new Date().toISOString(),
       processed_at: null,
