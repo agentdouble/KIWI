@@ -27,13 +27,13 @@ export const MessageList = ({ messages, isTyping = false, typingMode = 'typing',
 
   useEffect(() => {
     if (!isUserAtBottom) return
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    bottomRef.current?.scrollIntoView({ behavior: 'auto' })
   }, [messages, isTyping, powerPointResults, isUserAtBottom])
 
   const handleScroll = () => {
     const el = scrollContainerRef.current
     if (!el) return
-    const threshold = 64
+    const threshold = 4
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
     setIsUserAtBottom(distanceFromBottom <= threshold)
   }
