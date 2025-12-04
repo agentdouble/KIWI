@@ -14,7 +14,7 @@ SYSTEM_USER_EMAIL = "foyergpt-system@foyer.lu"
 SYSTEM_USER_TRIGRAM = "SYS"
 
 _POWERPOINT_SYSTEM_PROMPT = (
-    "Tu es PowerPoint Maestro, un agent officiel de FoyerGPT spécialisé dans la création de "
+    "Tu es Powerpoint generateur, un agent officiel de FoyerGPT spécialisé dans la création de "
     "présentations professionnelles. Ton rôle est de transformer chaque demande en un PowerPoint "
     "complet en utilisant l'outil `generate_powerpoint_from_text`.\n\n"
     "Processus obligatoire :\n"
@@ -32,7 +32,7 @@ _POWERPOINT_SYSTEM_PROMPT = (
 
 OFFICIAL_AGENTS: List[Dict] = [
     {
-        "name": "PowerPoint Maestro",
+        "name": "Powerpoint generateur",
         "description": "Agent officiel qui convertit vos idées en présentations PowerPoint en un clic.",
         "system_prompt": _POWERPOINT_SYSTEM_PROMPT,
         "avatar": "📊",
@@ -49,6 +49,27 @@ OFFICIAL_AGENTS: List[Dict] = [
         },
     }
 ]
+
+async def _find_existing_agent(session: AsyncSession, config: Dict) -> Agent | None:
+    """
+    Locate an existing agent by name, or by marker capability/tag (without ARRAY.contains
+    to stay compatible with SQLite/dialects lacking native ARRAY support).
+    """
+    by_name = await session.execute(select(Agent).where(Agent.name == config["name"]).limit(1))
+    agent = by_name.scalar_one_or_none()
+    if agent:
+        return agent
+
+    if FORCE_POWERPOINT_MARKER not in config.get("capabilities", []):
+        return None
+
+    all_agents = await session.execute(select(Agent))
+    for candidate in all_agents.scalars():
+        caps = candidate.capabilities or []
+        tags = candidate.tags or []
+        if FORCE_POWERPOINT_MARKER in caps or FORCE_POWERPOINT_MARKER in tags:
+            return candidate
+    return None
 
 
 def _generate_secure_password() -> str:
@@ -109,11 +130,13 @@ async def ensure_official_agents(session: AsyncSession) -> None:
     has_changes = False
 
     for config in OFFICIAL_AGENTS:
-        result = await session.execute(select(Agent).where(Agent.name == config["name"]))
-        agent = result.scalar_one_or_none()
+        agent = await _find_existing_agent(session, config)
 
         if agent:
             updated = False
+            if agent.name != config["name"]:
+                agent.name = config["name"]
+                updated = True
             if agent.user_id != system_user.id:
                 agent.user_id = system_user.id
                 updated = True

@@ -58,6 +58,7 @@ L'onglet **« Rôles & droits »** du tableau de bord admin expose ces informati
 - Marketplace d'agents publics
 - Gestion des agents privés par utilisateur
 - Assistants par défaut propres à chaque utilisateur, non visibles dans le marketplace des autres comptes
+- Agent MCP officiel **« Powerpoint generateur »** pour la création de présentations PowerPoint, visible uniquement dans la section « Officiels » du Marketplace (et non dans « Featured »)
 
 ### Interface de chat avancée
 - Conversations en temps réel avec streaming des réponses
@@ -177,7 +178,7 @@ npm run dev
 
 ### Initialiser un compte admin
 
-- Les droits administrateur sont déterminés uniquement par la variable `ADMIN_TRIGRAMMES` dans `backend/.env`.
+- Les droits administrateur sont déterminés par la variable `ADMIN_TRIGRAMMES` dans `backend/.env`.
 - Exemple :
 
   ```env
@@ -185,7 +186,12 @@ npm run dev
   ```
 
 - Tout utilisateur existant dont le trigramme figure dans cette liste est considéré comme administrateur.
-- Le script `./start.sh` ne crée plus automatiquement de compte admin : la création du premier utilisateur se fait manuellement (via la base de données ou un script dédié), en veillant à utiliser un trigramme présent dans `ADMIN_TRIGRAMMES`.
+- Au démarrage du backend, pour **chaque trigramme** défini dans `ADMIN_TRIGRAMMES` qui n'a pas encore de compte utilisateur en base, un compte admin est créé automatiquement :
+  - email : `<TRIGRAMME>@localhost` (par exemple `ADM@localhost`, `GJV@localhost`)
+  - trigramme : la valeur définie dans `ADMIN_TRIGRAMMES` (normalisée en majuscules)
+  - mot de passe : `admin`
+  - le flag `must_change_password` est positionné à `true`, ce qui **force le changement de mot de passe à la première connexion** (toutes les API restent bloquées sauf `/api/auth/me`, `/api/auth/change-password` et `/api/auth/logout` tant que le mot de passe n'a pas été changé).
+- Les comptes déjà existants pour un trigramme donné ne sont pas modifiés automatiquement (le mot de passe n’est pas écrasé). Seuls les trigrammes sans utilisateur en base reçoivent un compte auto-généré avec le mot de passe `admin`.
 
 ### Lancement simplifié avec `start.sh`
 
@@ -273,6 +279,8 @@ Vous pouvez sélectionner n'importe quel modèle de vision compatible (MiniCPM, 
 Le frontend se connecte automatiquement au backend via la variable d'environnement `VITE_BACKEND_URL` (par défaut `http://localhost:8077` dans `frontend/.env.example`), et est servi sur `VITE_FRONTEND_URL` (par défaut `http://localhost:8091`).
 
 Le module MCP PowerPoint (dossier `backend/mcp/powerpoint_mcp`) réutilise automatiquement cette configuration LLM du backend (`LLM_MODE`, `MISTRAL_API_KEY`, `VLLM_API_URL`, `VLLM_MODEL_NAME`) : vous n'avez donc à définir ces variables qu'une seule fois dans `backend/.env`.
+
+> Sécurité frontend : pour éviter toute fuite d'informations sensibles et garder une console F12 propre, tous les appels `console.log`, `console.info`, `console.warn`, `console.error` et `console.debug` sont neutralisés globalement côté frontend (en développement comme en production). Pour le débogage, privilégiez les outils réseau du navigateur, les notifications UI et les logs backend.
 
 > Le reloader Uvicorn est désactivé par défaut pour éviter la création de multiples processus lors des écritures dans `./storage`. Activez-le seulement en développement via `BACKEND_RELOAD=1` (le dossier de stockage est exclu du watcher) si vous avez besoin du hot reload.
 
