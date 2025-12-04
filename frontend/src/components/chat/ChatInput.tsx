@@ -70,24 +70,41 @@ export const ChatInput = ({
   
 
   const handleSubmit = () => {
-    if ((message.trim() || attachments.length > 0) && !disabled) {
+    const hasContent = message.trim() || attachments.length > 0
+
+    if (!hasContent) {
+      return
+    }
+
+    if (!disabled) {
       onSendMessage(message.trim(), attachments.length > 0 ? attachments : undefined)
       setMessage('')
       setAttachments([])
       onValueChange?.('')
-      
-      // Reset textarea height
-      if (textareaRef.current) {
+    }
+
+    // Toujours refocus la zone de texte, même si l'envoi est bloqué
+    if (textareaRef.current) {
+      // Reset textarea height uniquement après un envoi effectif
+      if (!disabled) {
         textareaRef.current.style.height = 'auto'
-        // Re-focus input to allow immediate typing of next message
-        // Use rAF to ensure focus after React state updates
-        requestAnimationFrame(() => {
-          if (textareaRef.current) {
-            textareaRef.current.focus()
-            textareaRef.current.setSelectionRange(0, 0)
-          }
-        })
       }
+
+      requestAnimationFrame(() => {
+        if (!textareaRef.current) return
+
+        textareaRef.current.focus()
+
+        if (!disabled) {
+          // Après envoi, positionner le curseur au début du champ vide
+          textareaRef.current.setSelectionRange(0, 0)
+        } else {
+          // Si l'envoi est bloqué (par ex. streaming en cours), garder le texte
+          // et placer le curseur à la fin
+          const length = textareaRef.current.value.length
+          textareaRef.current.setSelectionRange(length, length)
+        }
+      })
     }
   }
 
@@ -497,12 +514,10 @@ export const ChatInput = ({
               }}
               onKeyDown={handleKeyDown}
               placeholder={placeholder}
-              disabled={disabled}
               rows={1}
               className={cn(
                 "flex-1 resize-none bg-transparent pl-4 pr-2 py-4 text-base",
                 "focus:outline-none",
-                "disabled:opacity-50 disabled:cursor-not-allowed",
                 "max-h-32 text-gray-900 dark:text-gray-100"
               )}
             />
