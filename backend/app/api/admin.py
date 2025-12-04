@@ -1,16 +1,18 @@
 from datetime import datetime, timedelta, timezone
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import func, select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.models import (
     Agent,
     Chat,
+    FeedbackLoop,
     Group,
     GroupMember,
     Message,
@@ -27,6 +29,7 @@ from app.schemas.admin import (
     ChatCountPerDay,
     ChatCountPerHour,
     DashboardStatsResponse,
+    AdminFeedbackSummary,
     AdminManagedUser,
     UserMessagesToday,
     AdminCreateUserRequest,
@@ -42,6 +45,8 @@ from app.schemas.admin import (
     ServiceAccountSummary,
     ServiceAccountTokenResponse,
 )
+from app.schemas.chat import ChatResponse
+from app.schemas.message import MessageResponse
 from app.utils.auth import get_current_admin_user
 from app.services.rbac_service import (
     PERM_RBAC_MANAGE_GROUPS,
@@ -198,6 +203,139 @@ async def get_dashboard_stats(
         chats_per_day=chats_per_day,
         chats_per_agent=chats_per_agent,
         users_today=users_today,
+    )
+
+
+@router.get("/feedback", response_model=List[AdminFeedbackSummary])
+async def list_feedback_entries(
+    feedback_type: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    """Liste les feedbacks sur les messages de l'assistant pour analyse par les administrateurs."""
+    type_filter = feedback_type.lower() if feedback_type else None
+
+    stmt = (
+        select(
+            FeedbackLoop.id.label("feedback_id"),
+            FeedbackLoop.feedback_type.label("feedback_type"),
+            FeedbackLoop.created_at.label("feedback_created_at"),
+            FeedbackLoop.user_id.label("user_id"),
+            User.trigramme.label("user_trigramme"),
+            User.email.label("user_email"),
+            Message.id.label("message_id"),
+            Message.content.label("message_content"),
+            Message.created_at.label("message_created_at"),
+            Chat.id.label("chat_id"),
+            Chat.title.label("chat_title"),
+            Agent.id.label("agent_id"),
+            Agent.name.label("agent_name"),
+        )
+        .join(Message, FeedbackLoop.message_id == Message.id)
+        .join(Chat, Message.chat_id == Chat.id)
+        .join(User, FeedbackLoop.user_id == User.id)
+        .outerjoin(Agent, Chat.agent_id == Agent.id)
+        .where(Message.role == "assistant")
+    )
+
+    if type_filter in {"up", "down"}:
+        stmt = stmt.where(FeedbackLoop.feedback_type == type_filter)
+
+    stmt = stmt.order_by(FeedbackLoop.created_at.desc())
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    entries: List[AdminFeedbackSummary] = []
+    for row in rows:
+        entries.append(
+            AdminFeedbackSummary(
+                id=row.feedback_id,
+                feedback_type=row.feedback_type,
+                created_at=row.feedback_created_at,
+                user_id=row.user_id,
+                user_trigramme=row.user_trigramme,
+                user_email=row.user_email,
+                chat_id=row.chat_id,
+                chat_title=row.chat_title,
+                agent_id=row.agent_id,
+                agent_name=row.agent_name,
+                message_id=row.message_id,
+                message_created_at=row.message_created_at,
+                message_content=row.message_content,
+            )
+        )
+
+    logger.info(
+        "Admin %s listed %d feedback entries (type=%s)",
+        current_admin.trigramme,
+        len(entries),
+        type_filter or "all",
+    )
+    return entries
+
+
+@router.get("/feedback/{feedback_id}/chat", response_model=ChatResponse)
+async def get_feedback_chat(
+    feedback_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    """Retourne la conversation associée à un feedback donné (👍/👎)."""
+    feedback = await db.get(FeedbackLoop, feedback_id)
+    if not feedback:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Feedback introuvable.")
+
+    chat_result = await db.execute(
+        select(Chat)
+        .join(Message, Message.chat_id == Chat.id)
+        .where(Message.id == feedback.message_id)
+        .options(selectinload(Chat.messages).selectinload(Message.feedback_entries))
+    )
+    chat = chat_result.scalar_one_or_none()
+
+    if not chat:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Chat introuvable pour ce feedback.",
+        )
+
+    feedback_user_id = feedback.user_id
+
+    logger.info(
+        "Admin %s accessed chat %s for feedback %s",
+        current_admin.trigramme,
+        chat.id,
+        feedback.id,
+    )
+
+    return ChatResponse(
+        id=str(chat.id),
+        title=chat.title,
+        messages=[
+            MessageResponse(
+                id=str(msg.id),
+                role=msg.role,
+                content=msg.content,
+                created_at=msg.created_at,
+                chat_id=str(msg.chat_id),
+                tool_calls=None,
+                feedback=next(
+                    (
+                        entry.feedback_type
+                        for entry in msg.feedback_entries
+                        if entry.user_id == feedback_user_id
+                    ),
+                    None,
+                ),
+                is_edited=msg.is_edited,
+                user_message_id=None,
+            )
+            for msg in sorted(chat.messages, key=lambda m: m.created_at)
+        ],
+        created_at=chat.created_at,
+        updated_at=chat.updated_at,
+        agent_id=str(chat.agent_id) if chat.agent_id else None,
+        session_id=None,
     )
 
 

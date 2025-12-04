@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr
@@ -29,6 +29,22 @@ class UserMessagesToday(BaseModel):
     email: Optional[str]
     trigramme: Optional[str]
     message_count: int
+
+
+class AdminFeedbackSummary(BaseModel):
+    id: UUID
+    feedback_type: Literal["up", "down"]
+    created_at: datetime
+    user_id: UUID
+    user_trigramme: Optional[str] = None
+    user_email: Optional[EmailStr] = None
+    chat_id: UUID
+    chat_title: Optional[str] = None
+    agent_id: Optional[UUID] = None
+    agent_name: Optional[str] = None
+    message_id: UUID
+    message_created_at: datetime
+    message_content: str
 
 
 class DashboardStatsResponse(BaseModel):

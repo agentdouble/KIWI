@@ -9,13 +9,22 @@ import { alertService } from '@/lib/api/services/alert.service'
 import { featureUpdatesService } from '@/lib/api/services/featureUpdates.service'
 import type {
   AdminDashboardResponse,
+  AdminFeedbackEntry,
   AdminManagedUser,
+  ChatResponse,
   FeatureUpdateSection,
   FeatureUpdates,
   PermissionSummary,
   RoleSummary,
   SystemAlert,
 } from '@/types/api'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   Activity,
   BarChart2,
@@ -29,7 +38,11 @@ import {
   KeyRound,
   UserPlus,
   ShieldCheck,
+  ThumbsDown,
+  ThumbsUp,
 } from 'lucide-react'
+
+type AdminTabKey = 'stats' | 'users' | 'feedback' | 'alert' | 'updates' | 'rbac'
 
 const formatHour = (isoDate: string) => {
   const date = new Date(isoDate)
@@ -59,6 +72,285 @@ const formatDate = (isoDate: string | null) => {
     month: 'short',
     year: 'numeric',
   })
+}
+
+type FeedbackFilter = 'down' | 'up' | 'all'
+
+type FeedbackManagementTabProps = {
+  isActive: boolean
+}
+
+const FeedbackManagementTab = ({ isActive }: FeedbackManagementTabProps) => {
+  const { showToast } = useToast()
+  const [feedbacks, setFeedbacks] = useState<AdminFeedbackEntry[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [filter, setFilter] = useState<FeedbackFilter>('down')
+  const [selectedFeedback, setSelectedFeedback] = useState<AdminFeedbackEntry | null>(null)
+  const [selectedChat, setSelectedChat] = useState<ChatResponse | null>(null)
+  const [isChatLoading, setIsChatLoading] = useState(false)
+
+  const loadFeedbacks = useCallback(async () => {
+    if (!isActive) return
+    try {
+      setIsLoading(true)
+      setError(null)
+      const params = filter === 'all' ? undefined : { feedback_type: filter }
+      const data = await adminService.getFeedback(params)
+      setFeedbacks(data)
+    } catch {
+      setError("Impossible de récupérer les feedbacks.")
+    } finally {
+      setIsLoading(false)
+    }
+  }, [filter, isActive])
+
+  useEffect(() => {
+    void loadFeedbacks()
+  }, [loadFeedbacks])
+
+  const handleOpenChat = async (feedback: AdminFeedbackEntry) => {
+    setSelectedFeedback(feedback)
+    setSelectedChat(null)
+    setIsChatLoading(true)
+    try {
+      const chat = await adminService.getFeedbackChat(feedback.id)
+      setSelectedChat(chat)
+    } catch {
+      showToast("Impossible de charger la conversation.")
+    } finally {
+      setIsChatLoading(false)
+    }
+  }
+
+  const handleCloseDialog = (open: boolean) => {
+    if (!open) {
+      setSelectedFeedback(null)
+      setSelectedChat(null)
+    }
+  }
+
+  const renderContent = () => {
+    if (isLoading) {
+      return (
+        <div className="flex justify-center py-12">
+          <Loader2 className="w-6 h-6 text-blue-600 dark:text-blue-300 animate-spin" />
+        </div>
+      )
+    }
+
+    if (feedbacks.length === 0) {
+      return (
+        <div className="text-sm text-gray-500 dark:text-gray-400 text-center py-12 border border-dashed border-gray-200 dark:border-gray-700 rounded-lg">
+          Aucun feedback pour le moment sur les réponses de l'assistant.
+        </div>
+      )
+    }
+
+    return (
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
+          <thead className="bg-gray-100 dark:bg-gray-900/50">
+            <tr>
+              <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Date</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Type</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Utilisateur</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Agent</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Extrait du message</th>
+              <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Conversation</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+            {feedbacks.map(entry => {
+              const date = new Date(entry.created_at).toLocaleString('fr-FR')
+              const isNegative = entry.feedback_type === 'down'
+              return (
+                <tr key={entry.id} className="bg-white dark:bg-gray-900/60">
+                  <td className="px-4 py-3 text-gray-700 dark:text-gray-300 whitespace-nowrap">{date}</td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${
+                        isNegative
+                          ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                          : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+                      }`}
+                    >
+                      {isNegative ? (
+                        <>
+                          <ThumbsDown className="w-3 h-3" />
+                          <span>Négatif</span>
+                        </>
+                      ) : (
+                        <>
+                          <ThumbsUp className="w-3 h-3" />
+                          <span>Positif</span>
+                        </>
+                      )}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
+                    <div className="flex flex-col">
+                      <span className="font-medium text-gray-900 dark:text-white">
+                        {entry.user_trigramme || 'Utilisateur'}
+                      </span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        {entry.user_email || 'Email non renseigné'}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
+                    <div className="flex flex-col">
+                      <span className="font-medium text-gray-900 dark:text-white">
+                        {entry.agent_name || 'Agent inconnu'}
+                      </span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        {entry.chat_title || 'Chat sans titre'}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-gray-700 dark:text-gray-300 max-w-xs">
+                    <span className="line-clamp-2">{entry.message_content}</span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void handleOpenChat(entry)}
+                      className="inline-flex items-center gap-2"
+                    >
+                      Voir la conversation
+                    </Button>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+
+  const currentFeedbackLabel =
+    selectedFeedback?.feedback_type === 'down' ? 'Feedback négatif' : 'Feedback positif'
+
+  return (
+    <>
+      <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-800 rounded-xl p-6 space-y-6">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Feedbacks sur les réponses IA</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Visualisez les messages ayant reçu un pouce en bas ou en haut, et ouvrez la conversation associée pour comprendre le contexte.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant={filter === 'down' ? 'default' : 'outline'}
+              onClick={() => setFilter('down')}
+            >
+              Négatifs
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={filter === 'up' ? 'default' : 'outline'}
+              onClick={() => setFilter('up')}
+            >
+              Positifs
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={filter === 'all' ? 'default' : 'outline'}
+              onClick={() => setFilter('all')}
+            >
+              Tous
+            </Button>
+          </div>
+        </div>
+
+        {error && (
+          <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded-lg px-4 py-3">
+            {error}
+          </div>
+        )}
+
+        {renderContent()}
+      </div>
+
+      <Dialog open={Boolean(selectedFeedback)} onOpenChange={handleCloseDialog}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Conversation associée au feedback</DialogTitle>
+            <DialogDescription>
+              {selectedFeedback && (
+                <>
+                  {currentFeedbackLabel} de {selectedFeedback.user_trigramme || 'utilisateur'} sur l&apos;agent{' '}
+                  {selectedFeedback.agent_name || 'inconnu'}.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          {isChatLoading && (
+            <div className="flex justify-center py-8">
+              <Loader2 className="w-5 h-5 text-blue-600 dark:text-blue-300 animate-spin" />
+            </div>
+          )}
+
+          {!isChatLoading && selectedChat && (
+            <div className="mt-4 max-h-[60vh] overflow-y-auto space-y-3">
+              {selectedChat.messages.map(message => {
+                const isUser = message.role === 'user'
+                const createdAt = new Date(message.created_at).toLocaleString('fr-FR')
+                const isTarget = selectedFeedback && message.id === selectedFeedback.message_id
+                return (
+                  <div
+                    key={message.id}
+                    className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div
+                      className={`max-w-[80%] rounded-lg px-3 py-2 text-sm shadow-sm ${
+                        isUser
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100'
+                      } ${isTarget ? 'ring-2 ring-offset-2 ring-blue-500 dark:ring-offset-gray-900' : ''}`}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="text-xs font-semibold">
+                          {isUser ? 'Utilisateur' : 'Assistant'}
+                        </span>
+                        <span className="text-[10px] opacity-80">{createdAt}</span>
+                      </div>
+                      <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                      {isTarget && selectedFeedback && (
+                        <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-medium text-gray-800 dark:bg-gray-800/80 dark:text-gray-100">
+                          {selectedFeedback.feedback_type === 'down' ? (
+                            <>
+                              <ThumbsDown className="w-3 h-3 text-red-600" />
+                              <span>Feedback négatif</span>
+                            </>
+                          ) : (
+                            <>
+                              <ThumbsUp className="w-3 h-3 text-green-600" />
+                              <span>Feedback positif</span>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
+  )
 }
 
 type UserManagementTabProps = {
@@ -1013,7 +1305,7 @@ export const AdminDashboard = () => {
   const [stats, setStats] = useState<AdminDashboardResponse | null>(null)
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'stats' | 'users' | 'alert' | 'updates' | 'rbac'>('stats')
+  const [activeTab, setActiveTab] = useState<AdminTabKey>('stats')
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -1073,12 +1365,13 @@ export const AdminDashboard = () => {
 
         <Tabs
           value={activeTab}
-          onValueChange={value => setActiveTab(value as 'stats' | 'users' | 'alert' | 'updates' | 'rbac')}
+          onValueChange={value => setActiveTab(value as AdminTabKey)}
           className="space-y-6"
         >
-          <TabsList className="grid w-full max-w-xl grid-cols-5 md:w-auto">
+          <TabsList className="grid w-full max-w-xl grid-cols-6 md:w-auto">
             <TabsTrigger value="stats">Statistiques</TabsTrigger>
             <TabsTrigger value="users">Utilisateurs</TabsTrigger>
+            <TabsTrigger value="feedback">Feedback</TabsTrigger>
             <TabsTrigger value="alert">Alerte</TabsTrigger>
             <TabsTrigger value="updates">Nouveautés</TabsTrigger>
             <TabsTrigger value="rbac">Rôles & droits</TabsTrigger>
@@ -1273,6 +1566,10 @@ export const AdminDashboard = () => {
                 Aucune statistique disponible pour le moment.
               </div>
             )}
+          </TabsContent>
+
+          <TabsContent value="feedback" className="pt-4">
+            <FeedbackManagementTab isActive={activeTab === 'feedback'} />
           </TabsContent>
 
           <TabsContent value="rbac" className="pt-4">

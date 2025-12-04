@@ -67,6 +67,10 @@ L'onglet **« Rôles & droits »** du tableau de bord admin expose ces informati
 - Indicateurs de frappe en temps réel
 - Verrouillage par conversation : une seule génération IA à la fois par chat (prévention du spam multi-compte / multi-onglets)
 
+### Supervision et feedback
+- Tableau de bord administrateur avec onglet **Feedback** listant les messages ayant reçu un 👍/👎
+- Accès à la conversation complète associée à chaque feedback pour comprendre le contexte utilisateur
+
 ### Traitement intelligent de documents
 - Upload et analyse de documents multiformats
 - Extraction de texte avec OCR pour les images

@@ -39,6 +39,9 @@ export const MessageList = ({ messages, isTyping = false, typingMode = 'typing',
   }
 
   const lastUserMessageId = [...messages].reverse().find(msg => msg.role === 'user')?.id
+  const lastAssistantMessage = [...messages].reverse().find(msg => msg.role === 'assistant')
+  const isWaitingFirstAssistantToken =
+    isTyping && (!lastAssistantMessage || !lastAssistantMessage.content || !lastAssistantMessage.content.trim())
 
   if (messages.length === 0 && !isTyping) {
     return (
@@ -124,7 +127,7 @@ export const MessageList = ({ messages, isTyping = false, typingMode = 'typing',
             </div>
           )
         })}
-        {isTyping && <TypingIndicator mode={typingMode} />}
+        {isWaitingFirstAssistantToken && <TypingIndicator mode={typingMode} />}
         <div ref={bottomRef} className="h-32" />
       </div>
     </div>

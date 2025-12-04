@@ -4,6 +4,7 @@ import type {
   AdminDashboardResponse,
   AdminManagedUser,
   AdminResetPasswordRequest,
+  AdminFeedbackEntry,
   GroupCreateRequest,
   GroupDetail,
   GroupSummary,
@@ -12,6 +13,7 @@ import type {
   ServiceAccountCreateRequest,
   ServiceAccountSummary,
   ServiceAccountTokenResponse,
+  ChatResponse,
 } from '@/types/api'
 
 export const adminService = {
@@ -122,6 +124,18 @@ export const adminService = {
 
   async createServiceAccount(payload: ServiceAccountCreateRequest): Promise<ServiceAccountTokenResponse> {
     const response = await api.post<ServiceAccountTokenResponse>('/api/admin/services', payload)
+    return response.data
+  },
+
+  async getFeedback(params?: { feedback_type?: 'up' | 'down' }): Promise<AdminFeedbackEntry[]> {
+    const response = await api.get<AdminFeedbackEntry[]>('/api/admin/feedback', {
+      params,
+    })
+    return response.data
+  },
+
+  async getFeedbackChat(feedbackId: string): Promise<ChatResponse> {
+    const response = await api.get<ChatResponse>(`/api/admin/feedback/${feedbackId}/chat`)
     return response.data
   },
 }

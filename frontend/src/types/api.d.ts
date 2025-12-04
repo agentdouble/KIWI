@@ -151,6 +151,22 @@ export interface AdminDashboardResponse {
   users_today: AdminUserMessagesToday[]
 }
 
+export interface AdminFeedbackEntry {
+  id: string
+  feedback_type: 'up' | 'down'
+  created_at: string
+  user_id: string
+  user_trigramme: string | null
+  user_email: string | null
+  chat_id: string
+  chat_title: string | null
+  agent_id: string | null
+  agent_name: string | null
+  message_id: string
+  message_created_at: string
+  message_content: string
+}
+
 export interface AdminManagedUser {
   id: string
   email: string
