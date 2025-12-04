@@ -6,6 +6,7 @@ import { agentService } from '@/lib/api/services/agent.service'
 import { documentService } from '@/services/document.service'
 import type { IDocument } from '@/services/document.service'
 import { DocumentUpload } from '@/components/documents/DocumentUpload'
+import { DocumentUploadStatus } from '@/components/documents/DocumentUploadStatus'
 import { Plus, Globe, Lock, X, Camera } from 'lucide-react'
 import { AGENT_CATEGORIES, CATEGORY_LABELS } from '@/constants/categories'
 import { AnimatedCreateButton } from '@/components/ui/animated-create-button'
@@ -36,6 +37,8 @@ export const AgentForm = () => {
   const [avatarType, setAvatarType] = useState<'emoji' | 'image'>('emoji')
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [awaitingDocProcessing, setAwaitingDocProcessing] = useState(false)
+  const [createdAgentId, setCreatedAgentId] = useState<string | undefined>(id)
   const [errors, setErrors] = useState<Record<string, boolean>>({})
   const [showValidationError, setShowValidationError] = useState(false)
   
@@ -83,6 +86,9 @@ export const AgentForm = () => {
       if (existingAgent.avatarImage) {
         setAvatarType('image')
       }
+      if (id) {
+        setCreatedAgentId(id)
+      }
       // Charger les documents existants
       if (id) {
         loadExistingDocuments(id)
@@ -124,6 +130,7 @@ export const AgentForm = () => {
     
     setErrors({})
     setIsProcessing(true)
+    setAwaitingDocProcessing(false)
     
     const agentData: any = {
       name: formData.name,
@@ -155,29 +162,87 @@ export const AgentForm = () => {
         setIsProcessing(false)
       }
     } else {
-      const newAgent = await agentService.createAgent({
-        name: agentData.name,
-        description: agentData.description,
-        system_prompt: agentData.systemPrompt,
-        avatar: agentData.avatar,
-        avatar_image: agentData.avatarImage,
-        capabilities: agentData.capabilities || [],
-        is_public: agentData.isPublic || false
-      })
-      if (newAgent) {
-        // Si des documents temporaires sont sélectionnés, les uploader maintenant
-        const tempDocuments = documents.filter((doc: any) => doc._tempFile)
-        if (tempDocuments.length > 0) {
-          // Upload les documents temporaires
-          for (const doc of tempDocuments as any[]) {
-            await documentService.uploadAgentDocument(newAgent.id, doc._tempFile, doc.name)
-          }
+      try {
+        const newAgent = await agentService.createAgent({
+          name: agentData.name,
+          description: agentData.description,
+          system_prompt: agentData.systemPrompt,
+          avatar: agentData.avatar,
+          avatar_image: agentData.avatarImage,
+          capabilities: agentData.capabilities || [],
+          is_public: agentData.isPublic || false
+        })
+
+        if (!newAgent) {
+          setIsProcessing(false)
+          return
         }
-        // Attendre 2 secondes avant de rediriger
-        setTimeout(() => {
+
+        setCreatedAgentId(newAgent.id)
+
+        const tempDocuments = documents.filter((doc: any) => doc._tempFile) as (IDocument & { _tempFile: File })[]
+
+        if (tempDocuments.length === 0) {
+          setIsProcessing(false)
           navigate('/my-gpts')
-        }, 2000)
-      } else {
+          return
+        }
+
+        setAwaitingDocProcessing(true)
+        setDocuments((prev) =>
+          prev.map((doc) =>
+            (doc as any)._tempFile
+              ? {
+                  ...doc,
+                  processing_status: 'processing',
+                  processing_error: null,
+                  document_metadata: {
+                    ...(doc.document_metadata || {}),
+                    processing_stage: 'uploading',
+                    stage_label: 'Upload en cours',
+                    progress: 0.05,
+                  },
+                  _isUploading: true,
+                }
+              : doc
+          )
+        )
+
+        await Promise.all(
+          tempDocuments.map(async (doc) => {
+            try {
+              const uploaded = await documentService.uploadAgentDocument(newAgent.id, doc._tempFile, doc.name)
+              if (uploaded) {
+                setDocuments((prev) =>
+                  prev.map((item) => (item.id === doc.id ? uploaded : item))
+                )
+              }
+            } catch (uploadError) {
+              console.error('Failed to upload document:', uploadError)
+              setDocuments((prev) =>
+                prev.map((item) =>
+                  item.id === doc.id
+                    ? {
+                        ...item,
+                        processing_status: 'failed',
+                        processing_error: 'Upload échoué',
+                        document_metadata: {
+                          ...(item.document_metadata || {}),
+                          processing_stage: 'failed',
+                          stage_label: 'Upload échoué',
+                          progress: 1,
+                        },
+                        _tempFile: undefined,
+                        _isUploading: false,
+                      }
+                    : item
+                )
+              )
+            }
+          })
+        )
+      } catch (error) {
+        console.error('Failed to create agent:', error)
         setIsProcessing(false)
       }
     }
@@ -186,6 +251,23 @@ export const AgentForm = () => {
   const handleDocumentsChange = (newDocuments: IDocument[]) => {
     setDocuments(newDocuments)
   }
+
+  useEffect(() => {
+    if (!awaitingDocProcessing) return
+
+    const hasTempDocs = documents.some((doc: any) => (doc as any)._tempFile)
+    const hasActiveProcessing = documents.some(
+      (doc) =>
+        (doc.processing_status === 'pending' || doc.processing_status === 'processing') &&
+        !(doc as any)._tempFile
+    )
+
+    if (!hasTempDocs && !hasActiveProcessing) {
+      setAwaitingDocProcessing(false)
+      setIsProcessing(false)
+      navigate('/my-gpts')
+    }
+  }, [awaitingDocProcessing, documents, navigate])
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -199,24 +281,28 @@ export const AgentForm = () => {
     }
   }
 
-  // Afficher l'écran de chargement pendant le traitement
-  if (isProcessing) {
-    return (
-      <div className="flex-1 overflow-hidden bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 mb-4">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 dark:border-white"></div>
-          </div>
-          <p className="text-gray-600 dark:text-gray-400">
-            {isEditing ? 'Mise à jour du GPT...' : 'Création du GPT...'}
-          </p>
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div className="flex-1 overflow-hidden bg-white dark:bg-gray-900">
+    <div className="flex-1 overflow-hidden bg-white dark:bg-gray-900 relative">
+      {isProcessing && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/85 dark:bg-gray-900/85 backdrop-blur-sm px-4">
+          <div className="text-center max-w-xl p-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg">
+            <div className="inline-flex items-center justify-center w-16 h-16 mb-4">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 dark:border-white"></div>
+            </div>
+            <p className="text-gray-700 dark:text-gray-200">
+              {isEditing ? 'Mise à jour du GPT...' : 'Création du GPT...'}
+            </p>
+            {awaitingDocProcessing && (
+              <div className="mt-6 text-left">
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
+                  Traitement des documents en cours. Vous pourrez utiliser la base de connaissance une fois l'indexation terminée.
+                </p>
+                <DocumentUploadStatus documents={documents} />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       <div className="max-w-4xl mx-auto px-4 py-4 h-full flex flex-col">
         {/* Header */}
         <div className="flex items-center gap-4 mb-4">
@@ -385,7 +471,7 @@ export const AgentForm = () => {
               </p>
               <DocumentUpload
                 entityType="agent"
-                entityId={id}
+                entityId={createdAgentId}
                 documents={documents}
                 onDocumentsChange={handleDocumentsChange}
               />

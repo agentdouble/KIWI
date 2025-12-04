@@ -1,8 +1,9 @@
-import { useState, useRef } from 'react'
-import { Upload, X } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { Upload } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { documentService } from '@/services/document.service'
 import type { IDocument } from '@/services/document.service'
+import { DocumentUploadStatus } from '@/components/documents/DocumentUploadStatus'
 
 interface DocumentUploadProps {
   entityType: 'agent' | 'chat'
@@ -26,6 +27,31 @@ export const DocumentUpload = ({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const pollingRef = useRef<Record<string, boolean>>({})
+  const documentsRef = useRef<IDocument[]>(documents)
+  useEffect(() => {
+    documentsRef.current = documents
+  }, [documents])
+
+  const updateDocuments = (updater: (docs: IDocument[]) => IDocument[]) => {
+    const next = updater(documentsRef.current)
+    documentsRef.current = next
+    onDocumentsChange(next)
+  }
+
+  const startPolling = (doc: IDocument) => {
+    if (!doc.id || doc.id.startsWith('temp-') || doc.id.startsWith('uploading-')) return
+    if (pollingRef.current[doc.id]) return
+
+    pollingRef.current[doc.id] = true
+    documentService.pollDocumentStatus(doc.id, (updatedDoc) => {
+      updateDocuments((current) =>
+        current.map((d) => (d.id === updatedDoc.id ? updatedDoc : d))
+      )
+    }).finally(() => {
+      pollingRef.current[doc.id] = false
+    })
+  }
   // const [dragActive, setDragActive] = useState(false)
 
   // const handleDrag = (e: React.DragEvent) => {
@@ -48,6 +74,18 @@ export const DocumentUpload = ({
   //   }
   // }
 
+  useEffect(() => {
+    documents.forEach((doc) => {
+      if (
+        (doc.processing_status === 'pending' || doc.processing_status === 'processing') &&
+        !(doc as any)._tempFile &&
+        !(doc as any)._isUploading
+      ) {
+        startPolling(doc)
+      }
+    })
+  }, [documents])
+
   const handleFiles = async (files: FileList) => {
     // Si pas d'entityId, on stocke les fichiers localement pour upload ultérieur
     if (!entityId) {
@@ -64,25 +102,55 @@ export const DocumentUpload = ({
         uploaded_by: null,
         created_at: new Date().toISOString(),
         processed_at: null,
-        document_metadata: {},
+        processing_status: 'pending',
+        processing_error: null,
+        document_metadata: {
+          processing_stage: 'queued',
+          stage_label: 'En attente de création de l\'agent',
+          progress: 0,
+        },
         // Stockage temporaire du fichier
         _tempFile: file
       } as IDocument & { _tempFile?: File }))
       
-      onDocumentsChange([...documents, ...newFiles])
+      updateDocuments((current) => [...current, ...newFiles])
       return
     }
 
     const filesArray = Array.from(files)
     
     // Vérifier le nombre de fichiers
-    if (documents.length + filesArray.length > maxFiles) {
+    if (documentsRef.current.length + filesArray.length > maxFiles) {
       setError(`Limite de ${maxFiles} documents atteinte`)
       return
     }
 
+    const placeholders = filesArray.map((file) => ({
+      id: `uploading-${Date.now()}-${Math.random()}`,
+      name: file.name,
+      original_filename: file.name,
+      file_type: file.type || 'application/octet-stream',
+      file_size: file.size,
+      storage_path: '',
+      processed_path: null,
+      entity_type: entityType,
+      entity_id: entityId || '',
+      uploaded_by: null,
+      created_at: new Date().toISOString(),
+      processed_at: null,
+      processing_status: 'processing',
+      processing_error: null,
+      document_metadata: {
+        processing_stage: 'uploading',
+        stage_label: 'Upload en cours',
+        progress: 0.05,
+      },
+      _isUploading: true,
+    } as IDocument & { _isUploading?: boolean }))
+
     setError(null)
     setUploading(true)
+    updateDocuments((current) => [...current, ...placeholders])
 
     const uploadPromises = filesArray.map(async (file) => {
       // Validation côté client (non définitive, le serveur doit aussi valider)
@@ -123,12 +191,34 @@ export const DocumentUpload = ({
     })
 
     try {
-      const results = await Promise.all(uploadPromises)
+      const results = await Promise.all(
+        uploadPromises.map((promise, index) =>
+          promise
+            .then((doc) => {
+              if (doc) {
+                updateDocuments((current) =>
+                  current.map((d) => (d.id === placeholders[index].id ? doc : d))
+                )
+                if (doc.processing_status === 'pending' || doc.processing_status === 'processing') {
+                  startPolling(doc)
+                }
+              } else {
+                updateDocuments((current) =>
+                  current.filter((d) => d.id !== placeholders[index].id)
+                )
+              }
+              return doc
+            })
+            .catch((err) => {
+              updateDocuments((current) =>
+                current.filter((d) => d.id !== placeholders[index].id)
+              )
+              throw err
+            })
+        )
+      )
+
       const successfulUploads = results.filter(doc => doc !== null) as IDocument[]
-      
-      if (successfulUploads.length > 0) {
-        onDocumentsChange([...documents, ...successfulUploads])
-      }
       
       if (successfulUploads.length < filesArray.length) {
         setError(`${filesArray.length - successfulUploads.length} fichier(s) n'ont pas pu être uploadés`)
@@ -151,28 +241,14 @@ export const DocumentUpload = ({
     const docToDelete = documents.find(doc => doc.id === documentId)
     if (docToDelete && (docToDelete as any)._tempFile) {
       // Document temporaire, suppression locale seulement
-      onDocumentsChange(documents.filter(doc => doc.id !== documentId))
+      updateDocuments((current) => current.filter(doc => doc.id !== documentId))
     } else {
       // Document réel, suppression sur le serveur
       const success = await documentService.deleteDocument(documentId)
       if (success) {
-        onDocumentsChange(documents.filter(doc => doc.id !== documentId))
+        updateDocuments((current) => current.filter(doc => doc.id !== documentId))
       }
     }
-  }
-
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return bytes + ' B'
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
-  }
-
-  const getFileIcon = (fileType: string) => {
-    if (fileType.includes('pdf')) return '📄'
-    if (fileType.includes('word') || fileType.includes('docx')) return '📝'
-    if (fileType.includes('text')) return '📃'
-    if (fileType.includes('image')) return '🖼️'
-    return '📎'
   }
 
   return (
@@ -226,41 +302,11 @@ export const DocumentUpload = ({
           <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
             Documents ({documents.length}/{maxFiles})
           </p>
-          <div className="space-y-2">
-            {documents.map((doc) => (
-              <motion.div
-                key={doc.id}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">{getFileIcon(doc.file_type)}</span>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">
-                      {doc.name}
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {formatFileSize(doc.file_size)}
-                      {doc.processed_at && (
-                        <span className="ml-2 text-green-600 dark:text-green-400">
-                          • Traité ✓
-                        </span>
-                      )}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleDelete(doc.id)}
-                  className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                  disabled={uploading}
-                >
-                  <X className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                </button>
-              </motion.div>
-            ))}
-          </div>
+          <DocumentUploadStatus
+            documents={documents}
+            onRemove={(docId) => handleDelete(docId)}
+            className="space-y-2"
+          />
         </div>
       )}
 
