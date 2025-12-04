@@ -32,7 +32,7 @@ export const DocumentUpload = ({
   const pollingRef = useRef<Record<string, boolean>>({})
   const documentsRef = useRef<IDocument[]>(documents)
   const [resolvedEntityId, setResolvedEntityId] = useState<string | undefined>(entityId)
-  const [isResolvingEntity, setIsResolvingEntity] = useState(false)
+  const [, setIsResolvingEntity] = useState(false)
   useEffect(() => {
     documentsRef.current = documents
   }, [documents])
@@ -142,6 +142,8 @@ export const DocumentUpload = ({
       return
     }
 
+    const finalEntityId = targetEntityId
+
     const filesArray = Array.from(files)
     
     // Vérifier le nombre de fichiers
@@ -159,7 +161,7 @@ export const DocumentUpload = ({
       storage_path: '',
       processed_path: null,
       entity_type: entityType,
-      entity_id: targetEntityId || '',
+      entity_id: finalEntityId,
       uploaded_by: null,
       created_at: new Date().toISOString(),
       processed_at: null,
@@ -209,9 +211,9 @@ export const DocumentUpload = ({
 
       // Upload le fichier
       if (entityType === 'agent') {
-        return await documentService.uploadAgentDocument(entityId, file)
+        return await documentService.uploadAgentDocument(finalEntityId, file)
       } else {
-        return await documentService.uploadChatDocument(entityId, file)
+        return await documentService.uploadChatDocument(finalEntityId, file)
       }
     })
 

@@ -75,6 +75,7 @@ L'onglet **« Rôles & droits »** du tableau de bord admin expose ces informati
 ### Traitement intelligent de documents
 - Upload et analyse de documents multiformats
 - Suivi visuel du traitement (upload, extraction, indexation) lors de l'ajout de documents à un agent, avec redirection différée jusqu'à la fin de l'ingestion pour garantir une base de connaissance prête à l'emploi
+- Lors de la création d'un agent, les fichiers ajoutés sont immédiatement associés à l'ID nouvellement créé pour démarrer le traitement même si la création se termine avant l'ingestion
 - Extraction de texte avec OCR pour les images
 - Intégration contextuelle dans les conversations
 - Support pour PDF, DOCX, TXT, MD, et images
