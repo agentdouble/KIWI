@@ -178,7 +178,7 @@ npm run dev
 
 ### Initialiser un compte admin
 
-- Les droits administrateur sont déterminés uniquement par la variable `ADMIN_TRIGRAMMES` dans `backend/.env`.
+- Les droits administrateur sont déterminés par la variable `ADMIN_TRIGRAMMES` dans `backend/.env`.
 - Exemple :
 
   ```env
@@ -186,7 +186,12 @@ npm run dev
   ```
 
 - Tout utilisateur existant dont le trigramme figure dans cette liste est considéré comme administrateur.
-- Le script `./start.sh` ne crée plus automatiquement de compte admin : la création du premier utilisateur se fait manuellement (via la base de données ou un script dédié), en veillant à utiliser un trigramme présent dans `ADMIN_TRIGRAMMES`.
+- Au démarrage du backend, pour **chaque trigramme** défini dans `ADMIN_TRIGRAMMES` qui n'a pas encore de compte utilisateur en base, un compte admin est créé automatiquement :
+  - email : `<TRIGRAMME>@localhost` (par exemple `ADM@localhost`, `GJV@localhost`)
+  - trigramme : la valeur définie dans `ADMIN_TRIGRAMMES` (normalisée en majuscules)
+  - mot de passe : `admin`
+  - le flag `must_change_password` est positionné à `true`, ce qui **force le changement de mot de passe à la première connexion** (toutes les API restent bloquées sauf `/api/auth/me`, `/api/auth/change-password` et `/api/auth/logout` tant que le mot de passe n'a pas été changé).
+- Les comptes déjà existants pour un trigramme donné ne sont pas modifiés automatiquement (le mot de passe n’est pas écrasé). Seuls les trigrammes sans utilisateur en base reçoivent un compte auto-généré avec le mot de passe `admin`.
 
 ### Lancement simplifié avec `start.sh`
 

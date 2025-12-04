@@ -50,6 +50,27 @@ OFFICIAL_AGENTS: List[Dict] = [
     }
 ]
 
+async def _find_existing_agent(session: AsyncSession, config: Dict) -> Agent | None:
+    """
+    Locate an existing agent by name, or by marker capability/tag (without ARRAY.contains
+    to stay compatible with SQLite/dialects lacking native ARRAY support).
+    """
+    by_name = await session.execute(select(Agent).where(Agent.name == config["name"]).limit(1))
+    agent = by_name.scalar_one_or_none()
+    if agent:
+        return agent
+
+    if FORCE_POWERPOINT_MARKER not in config.get("capabilities", []):
+        return None
+
+    all_agents = await session.execute(select(Agent))
+    for candidate in all_agents.scalars():
+        caps = candidate.capabilities or []
+        tags = candidate.tags or []
+        if FORCE_POWERPOINT_MARKER in caps or FORCE_POWERPOINT_MARKER in tags:
+            return candidate
+    return None
+
 
 def _generate_secure_password() -> str:
     """Generate a random password for the system user."""
@@ -109,20 +130,7 @@ async def ensure_official_agents(session: AsyncSession) -> None:
     has_changes = False
 
     for config in OFFICIAL_AGENTS:
-        query = select(Agent)
-        if FORCE_POWERPOINT_MARKER in config.get("capabilities", []):
-            query = query.where(
-                or_(
-                    Agent.name == config["name"],
-                    Agent.capabilities.contains([FORCE_POWERPOINT_MARKER]),
-                    Agent.tags.contains([FORCE_POWERPOINT_MARKER]),
-                )
-            )
-        else:
-            query = query.where(Agent.name == config["name"])
-
-        result = await session.execute(query)
-        agent = result.scalar_one_or_none()
+        agent = await _find_existing_agent(session, config)
 
         if agent:
             updated = False
