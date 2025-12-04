@@ -58,6 +58,7 @@ L'onglet **« Rôles & droits »** du tableau de bord admin expose ces informati
 - Marketplace d'agents publics
 - Gestion des agents privés par utilisateur
 - Assistants par défaut propres à chaque utilisateur, non visibles dans le marketplace des autres comptes
+- Agent MCP officiel **« Powerpoint generateur »** pour la création de présentations PowerPoint, visible uniquement dans la section « Officiels » du Marketplace (et non dans « Featured »)
 
 ### Interface de chat avancée
 - Conversations en temps réel avec streaming des réponses

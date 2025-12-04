@@ -14,7 +14,7 @@ SYSTEM_USER_EMAIL = "foyergpt-system@foyer.lu"
 SYSTEM_USER_TRIGRAM = "SYS"
 
 _POWERPOINT_SYSTEM_PROMPT = (
-    "Tu es PowerPoint Maestro, un agent officiel de FoyerGPT spécialisé dans la création de "
+    "Tu es Powerpoint generateur, un agent officiel de FoyerGPT spécialisé dans la création de "
     "présentations professionnelles. Ton rôle est de transformer chaque demande en un PowerPoint "
     "complet en utilisant l'outil `generate_powerpoint_from_text`.\n\n"
     "Processus obligatoire :\n"
@@ -32,7 +32,7 @@ _POWERPOINT_SYSTEM_PROMPT = (
 
 OFFICIAL_AGENTS: List[Dict] = [
     {
-        "name": "PowerPoint Maestro",
+        "name": "Powerpoint generateur",
         "description": "Agent officiel qui convertit vos idées en présentations PowerPoint en un clic.",
         "system_prompt": _POWERPOINT_SYSTEM_PROMPT,
         "avatar": "📊",
@@ -109,11 +109,26 @@ async def ensure_official_agents(session: AsyncSession) -> None:
     has_changes = False
 
     for config in OFFICIAL_AGENTS:
-        result = await session.execute(select(Agent).where(Agent.name == config["name"]))
+        query = select(Agent)
+        if FORCE_POWERPOINT_MARKER in config.get("capabilities", []):
+            query = query.where(
+                or_(
+                    Agent.name == config["name"],
+                    Agent.capabilities.contains([FORCE_POWERPOINT_MARKER]),
+                    Agent.tags.contains([FORCE_POWERPOINT_MARKER]),
+                )
+            )
+        else:
+            query = query.where(Agent.name == config["name"])
+
+        result = await session.execute(query)
         agent = result.scalar_one_or_none()
 
         if agent:
             updated = False
+            if agent.name != config["name"]:
+                agent.name = config["name"]
+                updated = True
             if agent.user_id != system_user.id:
                 agent.user_id = system_user.id
                 updated = True
