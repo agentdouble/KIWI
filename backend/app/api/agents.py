@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_, func, and_, delete
+from sqlalchemy import select, or_, func, and_, delete, not_
 from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.models.agent import Agent, AgentFavorite
@@ -27,6 +27,16 @@ from typing import List, Optional
 from datetime import datetime, timedelta, timezone
 
 router = APIRouter()
+
+
+def _is_personal_default_agent(agent: Agent) -> bool:
+    """Détecte les assistants par défaut personnels créés automatiquement."""
+    tags = agent.tags or []
+    return (
+        agent.name == "Assistant par défaut"
+        and ("default" in tags or "personal" in tags)
+    )
+
 
 def agent_to_response(agent: Agent, is_favorite: bool = False) -> dict:
     """Convertir un agent en dictionnaire pour AgentResponse"""
@@ -71,11 +81,18 @@ async def get_agents(
         )
     elif current_user:
         # User connecté : voir ses agents privés + tous les agents publics
+        personal_default_filter = and_(
+            Agent.name == "Assistant par défaut",
+            Agent.tags.contains(["default"]),
+        )
         result = await db.execute(
             select(Agent).where(
                 or_(
                     Agent.user_id == current_user.id,
-                    Agent.is_public == True,
+                    and_(
+                        Agent.is_public == True,
+                        not_(personal_default_filter),
+                    ),
                 )
             )
             .options(selectinload(Agent.user))
@@ -85,7 +102,17 @@ async def get_agents(
         # User non connecté : voir seulement les agents publics
         result = await db.execute(
             select(Agent)
-            .where(Agent.is_public == True)
+            .where(
+                and_(
+                    Agent.is_public == True,
+                    not_(
+                        and_(
+                            Agent.name == "Assistant par défaut",
+                            Agent.tags.contains(["default"]),
+                        )
+                    ),
+                )
+            )
             .options(selectinload(Agent.user))
             .order_by(Agent.created_at.desc())
         )
@@ -177,8 +204,8 @@ async def get_weekly_popular_agents(
 
     MAX_RESULTS = 6
     for agent, weekly_usage_count, _ in result.all():
-        # Ignorer les agents par défaut (assistant généraliste)
-        if agent.is_default:
+        # Ignorer les agents par défaut (assistant généraliste) et personnels
+        if agent.is_default or _is_personal_default_agent(agent):
             continue
 
         payload = agent_to_response(agent, agent.id in favorite_agent_ids)
@@ -218,7 +245,7 @@ async def get_weekly_popular_agents(
 
         alltime_result = await db.execute(stmt_alltime)
         for agent, total_count, _ in alltime_result.all():
-            if agent.is_default:
+            if agent.is_default or _is_personal_default_agent(agent):
                 continue
             if agent.id in weekly_ids:
                 continue
