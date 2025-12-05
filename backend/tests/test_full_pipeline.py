@@ -98,7 +98,7 @@ def main():
     print("\n✅ All pipeline components are working correctly!")
     print("\nIf it's still not working in the live system:")
     print("1. Check that backend was restarted after changes")
-    print("2. Check MISTRAL_API_KEY is set in backend/.env")
+    print("2. Check OPENAI_API_KEY is set in backend/.env")
     print("3. Check the logs for 'Checking for PowerPoint request'")
     print("4. Make sure you're testing with exact phrase: 'genere powerpoint sur les animaux'")
 

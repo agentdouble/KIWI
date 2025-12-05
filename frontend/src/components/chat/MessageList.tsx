@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Message } from '@/types/chat'
 import { ChatMessage } from './ChatMessage'
 import { TypingIndicator } from './TypingIndicator'
@@ -22,12 +22,26 @@ interface MessageListProps {
 
 export const MessageList = ({ messages, isTyping = false, typingMode = 'typing', onRegenerateMessage, powerPointResults = [], editingMessageId, onEditMessageStart, onCancelEditMessage, onSaveEditMessage, isSavingEdit = false, attachmentBanners = {} }: MessageListProps) => {
   const bottomRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const [isUserAtBottom, setIsUserAtBottom] = useState(true)
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, isTyping, powerPointResults])
+    if (!isUserAtBottom) return
+    bottomRef.current?.scrollIntoView({ behavior: 'auto' })
+  }, [messages, isTyping, powerPointResults, isUserAtBottom])
+
+  const handleScroll = () => {
+    const el = scrollContainerRef.current
+    if (!el) return
+    const threshold = 4
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    setIsUserAtBottom(distanceFromBottom <= threshold)
+  }
 
   const lastUserMessageId = [...messages].reverse().find(msg => msg.role === 'user')?.id
+  const lastAssistantMessage = [...messages].reverse().find(msg => msg.role === 'assistant')
+  const isWaitingFirstAssistantToken =
+    isTyping && (!lastAssistantMessage || !lastAssistantMessage.content || !lastAssistantMessage.content.trim())
 
   if (messages.length === 0 && !isTyping) {
     return (
@@ -45,7 +59,11 @@ export const MessageList = ({ messages, isTyping = false, typingMode = 'typing',
   }
 
   return (
-    <div className="flex-1 overflow-y-auto bg-white dark:bg-gray-950">
+    <div
+      ref={scrollContainerRef}
+      className="flex-1 overflow-y-auto bg-white dark:bg-gray-950"
+      onScroll={handleScroll}
+    >
       <div className="max-w-3xl mx-auto">
         {messages.map((message, index) => {
           const powerPointResult = powerPointResults.find(r => r.messageId === message.id)
@@ -109,7 +127,7 @@ export const MessageList = ({ messages, isTyping = false, typingMode = 'typing',
             </div>
           )
         })}
-        {isTyping && <TypingIndicator mode={typingMode} />}
+        {isWaitingFirstAssistantToken && <TypingIndicator mode={typingMode} />}
         <div ref={bottomRef} className="h-32" />
       </div>
     </div>

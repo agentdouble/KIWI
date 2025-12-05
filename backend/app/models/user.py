@@ -30,6 +30,7 @@ class User(Base):
     chats = relationship("Chat", back_populates="user", cascade="all, delete-orphan")
     favorite_agents = relationship("AgentFavorite", back_populates="user", cascade="all, delete-orphan")
     feedback_entries = relationship("FeedbackLoop", back_populates="user", cascade="all, delete-orphan")
+    group_memberships = relationship("GroupMember", back_populates="user", cascade="all, delete-orphan")
     
     def set_password(self, password: str) -> None:
         self.password_hash = pwd_context.hash(password)

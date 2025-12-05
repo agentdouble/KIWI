@@ -12,12 +12,53 @@ FoyerGPT est une plateforme moderne de chat IA qui permet aux utilisateurs de cr
 - Gestion des sessions avec expiration automatique
 - Avatar utilisateur personnalisable
 
+### Gestion des droits (RBAC)
+- Modèle de rôles et permissions global (RBAC) : `admin`, `builder`, `viewer`
+- Rôles par défaut initialisés au démarrage, avec attribution automatique du rôle `builder` à tous les utilisateurs créés
+- Gestion fine des droits sur :
+  - les **agents** : création, mise à jour/suppression de ses propres agents, ou de tous les agents pour les admins
+  - les **chats** : création, consultation et archivage de ses propres conversations
+  - les **messages** : envoi, édition de ses propres messages et feedback (👍/👎) sur les réponses de l'assistant
+- Groupes d’utilisateurs avec héritage de rôles (attribution de rôles à un groupe, appliqués à tous ses membres)
+- Comptes services avec tokens API dédiés, gérés via l’API admin pour les intégrations externes
+
+#### Détail des principales permissions
+
+Les permissions sont stockées en base (table `permissions`) et associées aux rôles (`roles`) via des liens (`role_permissions`). Quelques exemples :
+
+- Agents :
+  - `agent:create` : créer des agents
+  - `agent:update:own` / `agent:delete:own` : gérer ses propres agents
+  - `agent:update:any` / `agent:delete:any` : gérer tous les agents
+- Chats :
+  - `chat:create` : créer des chats
+  - `chat:read:own` : lister et lire ses propres chats
+  - `chat:delete:own` : archiver/supprimer ses propres chats
+- Messages :
+  - `message:send` : envoyer des messages (inclut le streaming)
+  - `message:edit:own` : modifier ses propres messages utilisateur
+  - `message:feedback` : donner un feedback sur les messages de l'assistant
+
+Par défaut :
+- `admin` possède toutes ces permissions (plus les permissions d'administration : gestion utilisateurs, rôles, groupes, comptes service, etc.)
+- `builder` possède les permissions d'édition d'agents et l'ensemble des permissions de chat/messages pour utiliser la plateforme
+- `viewer` possède les permissions de chat/messages uniquement (usage de la plateforme sans création/édition d'agents)
+
+Les administrateurs disposant de la permission `rbac:manage_roles` peuvent :
+- créer des rôles personnalisés (API `POST /api/admin/roles`) en sélectionnant les permissions souhaitées,
+- modifier la description et les droits associés à un rôle existant (API `PATCH /api/admin/roles/{role_id}`),
+- supprimer un rôle non système (API `DELETE /api/admin/roles/{role_id}`).
+
+L'onglet **« Rôles & droits »** du tableau de bord admin expose ces informations et permet, pour chaque rôle, de cocher/décocher les permissions par famille (agents, chats, messages, administration, RBAC) afin d'adapter finement les droits sans toucher au code.
+
 ### Agents IA personnalisables
 - Création d'agents IA avec des prompts système personnalisés
 - Configuration des capacités d'apprentissage
 - Support multimodal (texte et documents)
 - Marketplace d'agents publics
 - Gestion des agents privés par utilisateur
+- Assistants par défaut propres à chaque utilisateur, non visibles dans le marketplace des autres comptes
+- Agent MCP officiel **« Powerpoint generateur »** pour la création de présentations PowerPoint, visible uniquement dans la section « Officiels » du Marketplace (et non dans « Featured »)
 
 ### Interface de chat avancée
 - Conversations en temps réel avec streaming des réponses
@@ -25,13 +66,21 @@ FoyerGPT est une plateforme moderne de chat IA qui permet aux utilisateurs de cr
 - Historique des conversations persistant
 - Export des conversations
 - Indicateurs de frappe en temps réel
+- Verrouillage par conversation : une seule génération IA à la fois par chat (prévention du spam multi-compte / multi-onglets)
+
+### Supervision et feedback
+- Tableau de bord administrateur avec onglet **Feedback** listant les messages ayant reçu un 👍/👎
+- Accès à la conversation complète associée à chaque feedback pour comprendre le contexte utilisateur
 
 ### Traitement intelligent de documents
 - Upload et analyse de documents multiformats
+- Suivi visuel du traitement (upload, extraction, indexation) lors de l'ajout de documents à un agent, avec redirection différée jusqu'à la fin de l'ingestion pour garantir une base de connaissance prête à l'emploi
+- Lors de la création d'un agent, les fichiers ajoutés sont immédiatement associés à l'ID nouvellement créé pour démarrer le traitement même si la création se termine avant l'ingestion
 - Extraction de texte avec OCR pour les images
 - Intégration contextuelle dans les conversations
 - Support pour PDF, DOCX, TXT, MD, et images
 - Découpage robuste des documents en chunks pour le RAG (sans fuite mémoire, même sur des contenus contenant beaucoup de retours à la ligne)
+- En mode local, l'analyse visuelle passe par vLLM : les appels sont bornés par `VLLM_TIMEOUT` et le traitement est mis en échec si le serveur vision ne répond pas, pour éviter les boucles interminables
 
 ### Modes LLM flexibles
 - **Mode API** : Intégration avec l'API Mistral
@@ -45,7 +94,7 @@ FoyerGPT est une plateforme moderne de chat IA qui permet aux utilisateurs de cr
 - **Base de données** : PostgreSQL avec SQLAlchemy 2.0
 - **Cache** : Redis pour les performances
 - **Temps réel** : Socket.IO pour les WebSockets
-- **Sécurité** : JWT, bcrypt, rate limiting
+- **Sécurité** : JWT, bcrypt, rate limiting (incluant les endpoints IA streaming) et verrous distribués Redis par conversation pour éviter les générations concurrentes
 
 ### Frontend (React/TypeScript)
 - **Framework** : React 19 avec TypeScript
@@ -128,26 +177,24 @@ npm run dev
 - La création et la suppression des comptes se font depuis l'onglet **Utilisateurs** du tableau de bord administrateur.
 - Les administrateurs définissent un mot de passe temporaire ; l'utilisateur est automatiquement redirigé vers l'écran de changement de mot de passe lors de sa première connexion.
 - Tant que le mot de passe n'est pas changé, l'accès aux autres API est bloqué (seules `/api/auth/me` et `/api/auth/change-password` restent accessibles).
+- Pendant que l'assistant répond, vous pouvez continuer à saisir le prochain message : il sera envoyé dès que la réponse en cours sera terminée, le bouton d'envoi affiche un indicateur carré pour signaler qu'une réponse est en cours, et vous pouvez faire défiler l'historique sans être automatiquement ramené en bas.
 
 ### Initialiser un compte admin
 
-1. Renseignez les variables suivantes dans `backend/.env` et ajoutez le trigramme choisi à `ADMIN_TRIGRAMMES` :
+- Les droits administrateur sont déterminés par la variable `ADMIN_TRIGRAMMES` dans `backend/.env`.
+- Exemple :
 
-   ```env
-   DEFAULT_ADMIN_EMAIL=admin@example.com
-   DEFAULT_ADMIN_TRIGRAMME=ADM
-   DEFAULT_ADMIN_PASSWORD=change-me
-   ADMIN_TRIGRAMMES=ADM
-   ```
+  ```env
+  ADMIN_TRIGRAMMES=ADM,GJV,GGG
+  ```
 
-2. Créez ou mettez à jour le compte admin dans la base :
-
-   ```bash
-   cd backend
-   uv run python init_admin_user.py
-   ```
-
-Le script active le compte, rafraîchit le mot de passe et échoue explicitement si le trigramme n'est pas autorisé. Le script `./start.sh` l'exécute automatiquement si les variables `DEFAULT_ADMIN_*` sont renseignées.
+- Tout utilisateur existant dont le trigramme figure dans cette liste est considéré comme administrateur.
+- Au démarrage du backend, pour **chaque trigramme** défini dans `ADMIN_TRIGRAMMES` qui n'a pas encore de compte utilisateur en base, un compte admin est créé automatiquement :
+  - email : `<TRIGRAMME>@localhost` (par exemple `ADM@localhost`, `GJV@localhost`)
+  - trigramme : la valeur définie dans `ADMIN_TRIGRAMMES` (normalisée en majuscules)
+  - mot de passe : `admin`
+  - le flag `must_change_password` est positionné à `true`, ce qui **force le changement de mot de passe à la première connexion** (toutes les API restent bloquées sauf `/api/auth/me`, `/api/auth/change-password` et `/api/auth/logout` tant que le mot de passe n'a pas été changé).
+- Les comptes déjà existants pour un trigramme donné ne sont pas modifiés automatiquement (le mot de passe n’est pas écrasé). Seuls les trigrammes sans utilisateur en base reçoivent un compte auto-généré avec le mot de passe `admin`.
 
 ### Lancement simplifié avec `start.sh`
 
@@ -200,13 +247,20 @@ LLM_MODE=api
 # false = désactive la vérification SSL (utile pour un vLLM distant avec certificat autosigné, à utiliser avec prudence)
 LLM_VERIFY_SSL=true
 
-# Mode API (Mistral Cloud)
-MISTRAL_API_KEY=your-mistral-key
-MISTRAL_MODEL=mistral-small-latest
+# Mode API (OpenAI standard)
+OPENAI_API_KEY=your-openai-key
+OPENAI_MODEL=gpt-4o-mini
+# Facultatif: pointer vers un endpoint OpenAI-compatible (ex: https://api.openai.com/v1 ou proxy vLLM)
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_TIMEOUT=120
+
+# Vision (Pixtral) en mode API
 VISION_MODEL=pixtral-large-latest
 # Optionnel : endpoint API custom compatible OpenAI (utile pour d'autres VLM)
-# VISION_API_URL=https://api.mistral.ai/v1/chat/completions
-# VISION_API_KEY=${MISTRAL_API_KEY}
+VISION_API_URL=https://api.mistral.ai/v1/chat/completions
+# Utilise VISION_API_KEY ou, par défaut, MISTRAL_API_KEY
+VISION_API_KEY=${MISTRAL_API_KEY}
+MISTRAL_API_KEY=your-mistral-key
 
 # Mode local (vLLM + Vision)
 # Utilisez une URL joignable depuis le backend (localhost, IP privée, ...)
@@ -216,8 +270,8 @@ VISION_VLLM_URL=http://localhost:8085/v1/chat/completions
 VISION_VLLM_MODEL=pixtral-large-latest  # ex: internvl2-8b, minicpm-v, etc.
 
 # Embeddings
-EMBEDDING_PROVIDER=mistral  # automatique si LLM_MODE=api
-EMBEDDING_MODEL=mistral-embed
+EMBEDDING_PROVIDER=openai  # automatique si LLM_MODE=api
+EMBEDDING_MODEL=text-embedding-3-small
 # EMBEDDING_LOCAL_MODEL_PATH=/home/llama/models/base_models/bge-reranker-large (obligatoire si EMBEDDING_PROVIDER=local)
 ```
 
@@ -228,6 +282,8 @@ Vous pouvez sélectionner n'importe quel modèle de vision compatible (MiniCPM, 
 Le frontend se connecte automatiquement au backend via la variable d'environnement `VITE_BACKEND_URL` (par défaut `http://localhost:8077` dans `frontend/.env.example`), et est servi sur `VITE_FRONTEND_URL` (par défaut `http://localhost:8091`).
 
 Le module MCP PowerPoint (dossier `backend/mcp/powerpoint_mcp`) réutilise automatiquement cette configuration LLM du backend (`LLM_MODE`, `MISTRAL_API_KEY`, `VLLM_API_URL`, `VLLM_MODEL_NAME`) : vous n'avez donc à définir ces variables qu'une seule fois dans `backend/.env`.
+
+> Sécurité frontend : pour éviter toute fuite d'informations sensibles et garder une console F12 propre, tous les appels `console.log`, `console.info`, `console.warn`, `console.error` et `console.debug` sont neutralisés globalement côté frontend (en développement comme en production). Pour le débogage, privilégiez les outils réseau du navigateur, les notifications UI et les logs backend.
 
 > Le reloader Uvicorn est désactivé par défaut pour éviter la création de multiples processus lors des écritures dans `./storage`. Activez-le seulement en développement via `BACKEND_RELOAD=1` (le dossier de stockage est exclu du watcher) si vous avez besoin du hot reload.
 
@@ -243,12 +299,9 @@ cd frontend
 npm test
 ```
 
-## Refactorisation backend
+> Remarque : certains tests liés aux intégrations MCP/PowerPoint nécessitent des modules supplémentaires (par exemple `src.converter` ou des clients MCP spécifiques). Pour vérifier uniquement le cœur de la gestion des droits, vous pouvez lancer : `uv run pytest tests/test_rbac_service.py`.
 
-- `app.services.llm_service.LLMService` centralise la délégation vers les modes API (`MistralService`) et local (`VLLMService`) tout en préservant le comportement existant.
-- `app.api.router.api_router` enregistre explicitement toutes les routes (y compris `auth`) au démarrage, ce qui évite de masquer d'éventuelles erreurs d'import.
-- `app.main` utilise un logger de module unique pour la journalisation HTTP, les exceptions et Socket.IO.
-- Les derniers appels `print` de débogage backend ont été remplacés par une journalisation structurée (`logging`) dans `app.config`, `app.api.documents` et `app.utils.dependencies`, afin d'être prêts pour la production et d'unifier les logs.
+> Les instantanés d’accessibilité générés localement (`.snap_*.json`) sont ignorés et peuvent être supprimés sans risque.
 
 ## Contribution
 

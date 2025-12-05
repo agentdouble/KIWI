@@ -30,7 +30,7 @@ interface ChatContainerProps {
 }
 
 export const ChatContainer = ({ initialChatId }: ChatContainerProps) => {
-  const { activeChat, isTyping, addMessage, setTyping, setActiveChat, chats, updateMessageContent } = useChatStore()
+  const { activeChat, isTyping, isStreaming, addMessage, setTyping, setStreaming, setActiveChat, chats, updateMessageContent } = useChatStore()
   const { activeAgent, agents, initializeDefaultAgents } = useAgentStore()
   const { user } = useAuthStore()
   const [inputValue, setInputValue] = useState('')
@@ -335,6 +335,9 @@ export const ChatContainer = ({ initialChatId }: ChatContainerProps) => {
   }
 
   const handleSubmit = (content: string, attachments?: IDocument[]) => {
+    if (isStreaming) {
+      return
+    }
     if (editingMessageId && activeChat) {
       const messageToEdit = activeChat.messages.find(msg => msg.id === editingMessageId)
       if (messageToEdit) {
@@ -477,6 +480,7 @@ export const ChatContainer = ({ initialChatId }: ChatContainerProps) => {
     
     // Le RAG est désormais géré côté serveur
     setTyping(true)
+    setStreaming(true)
     
     let assistantMessageId: string | null = null
 
@@ -559,6 +563,7 @@ export const ChatContainer = ({ initialChatId }: ChatContainerProps) => {
             }
 
             setTyping(false)
+            setStreaming(false)
             setTypingMode('typing')
           },
           onError: ({ error }) => {
@@ -567,6 +572,7 @@ export const ChatContainer = ({ initialChatId }: ChatContainerProps) => {
               serverId: streamAssistantId,
             })
             setTyping(false)
+            setStreaming(false)
             setTypingMode('typing')
           },
         }
@@ -594,6 +600,7 @@ export const ChatContainer = ({ initialChatId }: ChatContainerProps) => {
       }
     } finally {
       setTyping(false)
+      setStreaming(false)
       setTypingMode('typing') // Réinitialiser le mode
     }
   }
@@ -699,14 +706,15 @@ export const ChatContainer = ({ initialChatId }: ChatContainerProps) => {
             )}
             
             <div className="w-full max-w-3xl px-4 mt-8">
-              <ChatInput 
-                onSendMessage={handleSubmit}
-                disabled={isSavingEdit || Boolean(editingMessageId)}
-                initialValue={inputValue}
-                onValueChange={setInputValue}
-                placeholder="Ask anything"
-                centered
-                chatId={activeChat?.id}
+            <ChatInput 
+              onSendMessage={handleSubmit}
+              disabled={isSavingEdit || Boolean(editingMessageId) || isStreaming}
+              isStreaming={isStreaming}
+              initialValue={inputValue}
+              onValueChange={setInputValue}
+              placeholder="Ask anything"
+              centered
+              chatId={activeChat?.id}
               />
               {shouldShowUpdatesPopup && (
                 <FeatureUpdatesPopup onClose={() => setShowUpdatesPopup(false)} />
@@ -731,7 +739,8 @@ export const ChatContainer = ({ initialChatId }: ChatContainerProps) => {
           />
           <ChatInput 
             onSendMessage={handleSubmit}
-            disabled={isSavingEdit || Boolean(editingMessageId)}
+            disabled={isSavingEdit || Boolean(editingMessageId) || isStreaming}
+            isStreaming={isStreaming}
             initialValue={inputValue}
             onValueChange={setInputValue}
             chatId={activeChat?.id}

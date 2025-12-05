@@ -18,7 +18,7 @@ L'intégration MCP PowerPoint permet au chat généraliste de détecter automati
    - Génère les présentations via Mistral
    - Gère les fichiers générés
 
-3. **Service Mistral** (`backend/app/services/mistral_service.py`)
+3. **Service OpenAI** (`backend/app/services/openai_service.py`)
    - Support des function calls
    - Gère les appels d'outils MCP
    - Formate les réponses pour l'utilisateur

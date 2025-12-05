@@ -14,11 +14,35 @@ from app.schemas.agent import (
     UpdateAgentRequest,
 )
 from app.utils.auth import get_optional_current_user, get_current_active_user
+from app.services.rbac_service import (
+    PERM_AGENT_CREATE,
+    PERM_AGENT_DELETE_ANY,
+    PERM_AGENT_DELETE_OWN,
+    PERM_AGENT_UPDATE_ANY,
+    PERM_AGENT_UPDATE_OWN,
+    user_has_permission,
+)
 import uuid
 from typing import List, Optional
 from datetime import datetime, timedelta, timezone
 
 router = APIRouter()
+
+
+def _is_personal_default_agent(agent: Agent) -> bool:
+    """Détecte les assistants par défaut personnels créés automatiquement."""
+    tags = [t.lower() for t in (agent.tags or [])]
+    name = (agent.name or "").strip() if agent.name else ""
+    description = (agent.description or "").strip() if agent.description else ""
+    return (
+        name == "Assistant par défaut"
+        and (
+            description == "Votre assistant personnel"
+            or "default" in tags
+            or "personal" in tags
+        )
+    )
+
 
 def agent_to_response(agent: Agent, is_favorite: bool = False) -> dict:
     """Convertir un agent en dictionnaire pour AgentResponse"""
@@ -68,22 +92,25 @@ async def get_agents(
                 or_(
                     Agent.user_id == current_user.id,
                     Agent.is_public == True,
-                    Agent.is_default == True
                 )
-            ).options(selectinload(Agent.user)).order_by(Agent.created_at.desc())
+            )
+            .options(selectinload(Agent.user))
+            .order_by(Agent.created_at.desc())
         )
     else:
-        # User non connecté : voir seulement les agents publics et par défaut
+        # User non connecté : voir seulement les agents publics
         result = await db.execute(
-            select(Agent).where(
-                or_(
-                    Agent.is_public == True,
-                    Agent.is_default == True
-                )
-            ).options(selectinload(Agent.user)).order_by(Agent.created_at.desc())
+            select(Agent)
+            .where(Agent.is_public == True)
+            .options(selectinload(Agent.user))
+            .order_by(Agent.created_at.desc())
         )
     
     agents = result.scalars().all()
+
+    # Ne jamais exposer les assistants personnels par défaut dans les listings (marketplace),
+    # quel que soit le rôle de l'utilisateur.
+    agents = [agent for agent in agents if not _is_personal_default_agent(agent)]
     
     return [
         AgentResponse(**agent_to_response(agent, agent.id in favorite_agent_ids)) for agent in agents
@@ -95,15 +122,24 @@ async def get_default_agents(
     current_user: Optional[User] = Depends(get_optional_current_user)
 ):
     """Récupérer les agents par défaut"""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
     favorite_agent_ids: set[uuid.UUID] = set()
-    if current_user:
-        favorite_result = await db.execute(
-            select(AgentFavorite.agent_id).where(AgentFavorite.user_id == current_user.id)
-        )
-        favorite_agent_ids = {row for row in favorite_result.scalars()}
+    favorite_result = await db.execute(
+        select(AgentFavorite.agent_id).where(AgentFavorite.user_id == current_user.id)
+    )
+    favorite_agent_ids = {row for row in favorite_result.scalars()}
 
     result = await db.execute(
-        select(Agent).where(Agent.is_default == True).options(selectinload(Agent.user))
+        select(Agent)
+        .where(
+            and_(
+                Agent.is_default == True,
+                Agent.user_id == current_user.id,
+            )
+        )
+        .options(selectinload(Agent.user))
     )
     agents = result.scalars().all()
     
@@ -161,8 +197,8 @@ async def get_weekly_popular_agents(
 
     MAX_RESULTS = 6
     for agent, weekly_usage_count, _ in result.all():
-        # Ignorer les agents par défaut (assistant généraliste)
-        if agent.is_default:
+        # Ignorer les agents par défaut (assistant généraliste) et personnels
+        if agent.is_default or _is_personal_default_agent(agent):
             continue
 
         payload = agent_to_response(agent, agent.id in favorite_agent_ids)
@@ -202,7 +238,7 @@ async def get_weekly_popular_agents(
 
         alltime_result = await db.execute(stmt_alltime)
         for agent, total_count, _ in alltime_result.all():
-            if agent.is_default:
+            if agent.is_default or _is_personal_default_agent(agent):
                 continue
             if agent.id in weekly_ids:
                 continue
@@ -223,6 +259,9 @@ async def create_agent(
     current_user: User = Depends(get_current_active_user)
 ):
     """Créer un nouvel agent (nécessite une authentification)"""
+    if not await user_has_permission(db, current_user, PERM_AGENT_CREATE):
+        raise HTTPException(status_code=403, detail="You are not allowed to create agents")
+
     agent = Agent(
         name=request.name,
         description=request.description,
@@ -260,7 +299,7 @@ async def get_agent(
     # Vérifier les permissions
     is_admin = bool(current_user and current_user.is_admin)
 
-    if not agent.is_public and not agent.is_default:
+    if not agent.is_public:
         if not current_user or (agent.user_id != current_user.id and not is_admin):
             raise HTTPException(status_code=403, detail="Access denied")
     
@@ -292,10 +331,13 @@ async def update_agent(
     
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
-    
-    # Vérifier que l'utilisateur est le propriétaire
-    if agent.user_id != current_user.id and not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="You can only update your own agents")
+
+    is_owner = agent.user_id == current_user.id
+    can_update_own = await user_has_permission(db, current_user, PERM_AGENT_UPDATE_OWN)
+    can_update_any = await user_has_permission(db, current_user, PERM_AGENT_UPDATE_ANY)
+
+    if not ((is_owner and can_update_own) or can_update_any):
+        raise HTTPException(status_code=403, detail="You are not allowed to update this agent")
     
     # Mettre � jour les champs fournis
     if request.name is not None:
@@ -339,7 +381,9 @@ async def favorite_agent(
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
 
-    if not agent.is_public and not agent.is_default and agent.user_id != current_user.id:
+    is_admin = bool(current_user and current_user.is_admin)
+
+    if not agent.is_public and agent.user_id != current_user.id and not is_admin:
         raise HTTPException(status_code=403, detail="Access denied")
 
     existing_favorite = await db.execute(
@@ -387,10 +431,13 @@ async def delete_agent(
     
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
-    
-    # Vérifier que l'utilisateur est le propriétaire
-    if agent.user_id != current_user.id and not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="You can only delete your own agents")
+
+    is_owner = agent.user_id == current_user.id
+    can_delete_own = await user_has_permission(db, current_user, PERM_AGENT_DELETE_OWN)
+    can_delete_any = await user_has_permission(db, current_user, PERM_AGENT_DELETE_ANY)
+
+    if not ((is_owner and can_delete_own) or can_delete_any):
+        raise HTTPException(status_code=403, detail="You are not allowed to delete this agent")
     
     await db.delete(agent)
     await db.commit()

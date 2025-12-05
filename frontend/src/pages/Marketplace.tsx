@@ -277,11 +277,18 @@ export const Marketplace = () => {
   })
   
   const shouldShowFeatured = !searchQuery && !selectedCategory
-  const specializedAgents = filteredAgents.filter((agent) => !agent.isDefault)
+  const nonSystemAgents = filteredAgents.filter(
+    (agent) => !agent.isSystemAgent && agent.createdBy !== 'system'
+  )
+  const specializedAgents = nonSystemAgents.filter((agent) => !agent.isDefault)
   const featuredAgents = useMemo<FeaturedAgent[]>(() => {
     if (!shouldShowFeatured) return []
 
-    const topPopular = popularAgentsWithFavorites.slice(0, 6)
+    const nonSystemPopular = popularAgentsWithFavorites.filter(
+      (agent) => !agent.isSystemAgent && agent.createdBy !== 'system'
+    )
+
+    const topPopular = nonSystemPopular.slice(0, 6)
     if (topPopular.length === 6) {
       return topPopular
     }

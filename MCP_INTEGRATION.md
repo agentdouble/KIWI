@@ -11,7 +11,7 @@ Le système détecte automatiquement les demandes de génération PowerPoint et 
 ```
 Chat System
 ├── message_service.py     # Détecte les demandes PowerPoint
-├── mistral_service.py     # Gère les appels d'outils via Mistral API
+├── openai_service.py      # Gère les appels d'outils via API OpenAI-compatible
 ├── mcp_service.py         # Coordonne les outils MCP
 └── backend/mcp/powerpoint_mcp/
     ├── mcp_server.py      # Serveur MCP PowerPoint

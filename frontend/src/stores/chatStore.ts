@@ -7,6 +7,7 @@ interface ChatState {
   chats: Chat[]
   activeChat: Chat | null
   isTyping: boolean
+  isStreaming: boolean
   
   // Actions
   createChat: (withActiveAgent?: boolean) => Chat
@@ -18,6 +19,7 @@ interface ChatState {
   updateChatTitle: (chatId: string, title: string) => Promise<void>
   deleteChat: (chatId: string) => Promise<void>
   setTyping: (isTyping: boolean) => void
+  setStreaming: (isStreaming: boolean) => void
   setChats: (chats: Chat[]) => void
 }
 
@@ -25,6 +27,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   chats: [],
   activeChat: null,
   isTyping: false,
+   isStreaming: false,
 
   createChat: (withActiveAgent = false) => {
     let agentId = undefined
@@ -208,6 +211,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   setTyping: (isTyping) => {
     set({ isTyping })
+  },
+
+  setStreaming: (isStreaming) => {
+    set({ isStreaming })
   },
   
   setChats: (chats) => {

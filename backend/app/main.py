@@ -6,7 +6,9 @@ from app.database import engine, Base, AsyncSessionLocal
 from app.utils.rate_limit import limiter, rate_limit_exceeded_handler
 from app.utils.cache import cache_service
 from app.utils.schema import ensure_document_processing_schema, ensure_user_security_schema
+from app import models  # noqa: F401 - ensure all models are loaded
 from slowapi.errors import RateLimitExceeded
+from app.initial_data.admin_user import ensure_initial_admin
 import socketio
 import logging
 
@@ -95,6 +97,19 @@ async def startup_event():
 
     # Initialiser le service de cache Redis
     await cache_service.connect()
+
+    # Initialiser les rôles et permissions RBAC
+    try:
+        from app.services.rbac_service import ensure_rbac_defaults
+
+        async with AsyncSessionLocal() as session:
+            await ensure_rbac_defaults(session)
+    except Exception as exc:
+        logger.error("Failed to ensure RBAC defaults: %s", exc, exc_info=True)
+
+    # Garantir la présence d'au moins un compte admin
+    async with AsyncSessionLocal() as session:
+        await ensure_initial_admin(session)
 
     # Garantir la présence des agents officiels
     try:
